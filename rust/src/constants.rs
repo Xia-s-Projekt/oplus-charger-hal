@@ -13,6 +13,7 @@ pub const K_WRITE_ERROR: i32 = 0x8000_0003u32 as i32; // write() returned < 0
 
 pub const K_FAST_CHARGE_WATTS: i32 = 33;
 pub const K_SUPER_VOOC_WATTS: i32 = 45;
+pub const K_MIN_REPORT_WATTS: i32 = 25;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChargeTechnology {

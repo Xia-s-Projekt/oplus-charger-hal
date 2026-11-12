@@ -10,7 +10,7 @@ impl Charger {
     }
 
     pub fn getAcType(&self) -> i32 {
-        clamp0(read_node_int("/sys/class/power_supply/ac/type", Some("/sys/class/oplus_chg/ac/type")))
+        clamp0(read_node_int("/sys/class/power_supply/ac/type", Some("/sys/devices/platform/charger/Charger_Type")))
     }
 
     pub fn getBattAuthenticate(&self) -> i32 {
@@ -18,7 +18,7 @@ impl Charger {
     }
 
     pub fn getBattPPSChgIng(&self) -> i32 {
-        clamp0(read_node_int_single("/sys/class/oplus_chg/battery/ppschg_ing"))
+        clamp0(read_node_int("/sys/class/oplus_chg/battery/ppschg_ing", Some("/sys/devices/platform/charger/fast_chg_indicator")))
     }
 
     pub fn getBattParamNoplug(&self) -> String {
@@ -30,7 +30,7 @@ impl Charger {
     }
 
     pub fn getBattSubCurrent(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/battery/sub_current", Some("/sys/class/oplus_chg/battery/sub_current"))
+        read_node_int("/sys/class/power_supply/battery/sub_current", Some("/sys/class/power_supply/battery/current_avg"))
     }
 
     pub fn getBatteryVoltageNow(&self) -> i32 {
@@ -62,7 +62,7 @@ impl Charger {
     }
 
     pub fn getPsyAcOnline(&self) -> i32 {
-        clamp0(read_node_int("/sys/class/power_supply/ac/online", Some("/sys/class/oplus_chg/ac/online")))
+        clamp0(read_node_int("/sys/class/power_supply/ac/online", Some("/sys/class/power_supply/mtk-master-charger/online")))
     }
 
     pub fn getPsyBatteryCC(&self) -> i32 {
@@ -98,7 +98,7 @@ impl Charger {
     }
 
     pub fn getPsyBatteryShortStatus(&self) -> i32 {
-        clamp0(read_node_int("/sys/class/power_supply/battery/short_c_hw_status", Some("/sys/class/oplus_chg/battery/short_c_hw_status")))
+        clamp0(read_node_int("/sys/class/power_supply/battery/short_c_hw_status", Some("/sys/devices/platform/charger/cc_smt_status")))
     }
 
     pub fn getPsyBatteryStatus(&self) -> String {
@@ -110,7 +110,7 @@ impl Charger {
     }
 
     pub fn getPsyInputCurrent(&self) -> i32 {
-        clamp0(read_node_int_single("/proc/charger/input_current_now"))
+        clamp0(read_node_int("/proc/charger/input_current_now", Some("/sys/class/power_supply/charger/input_current_limit")))
     }
 
     pub fn getPsyPcPortOnline(&self) -> i32 {
@@ -154,11 +154,11 @@ impl Charger {
     }
 
     pub fn getUsbInputCurrentNow(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/usb/input_current_now", Some("/sys/class/oplus_chg/usb/input_current_now"))
+        read_node_int("/sys/class/power_supply/usb/input_current_now", Some("/sys/class/power_supply/charger/input_current_limit"))
     }
 
     pub fn getUsbPrimalType(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/usb/primal_type", Some("/sys/class/oplus_chg/usb/primal_type"))
+        read_node_int("/sys/class/power_supply/usb/primal_type", Some("/sys/devices/platform/charger/chr_type"))
     }
 
     pub fn getWiredOtgOnline(&self) -> i32 {
@@ -218,11 +218,11 @@ impl Charger {
     }
 
     pub fn setChargeEMMode(&self, a0: &str) -> i32 {
-        write_node("/sys/class/power_supply/battery/em_mode", Some("/sys/class/oplus_chg/battery/em_mode"), a0)
+        write_node("/sys/class/power_supply/battery/em_mode", Some("/sys/devices/platform/charger/enable_meta_current_limit"), a0)
     }
 
     pub fn setChargerCoolDown(&self, a0: &str) -> i32 {
-        write_node("/sys/class/power_supply/battery/cool_down", Some("/sys/class/oplus_chg/battery/cool_down"), a0)
+        write_node("/sys/class/power_supply/battery/cool_down", Some("/sys/devices/platform/charger/Thermal_throttle"), a0)
     }
 
     pub fn setChargerCriticalLog(&self, a0: &str) -> i32 {
@@ -250,7 +250,7 @@ impl Charger {
     }
 
     pub fn setShipMode(&self, a0: &str) -> i32 {
-        write_node("/sys/class/power_supply/battery/ship_mode", Some("/sys/class/oplus_chg/battery/ship_mode"), a0)
+        write_node("/sys/class/power_supply/battery/ship_mode", Some("/sys/devices/platform/charger/shipmode_enable"), a0)
     }
 
     pub fn setSmartChgMode(&self, a0: &str) -> i32 {
@@ -334,7 +334,7 @@ impl Charger {
     }
 
     pub fn getChargingModeInGsmCall(&self) -> i32 {
-        read_node_int_single("/sys/class/oplus_chg/battery/gsm_call_ongoing")
+        read_node_int("/sys/class/oplus_chg/battery/gsm_call_ongoing", Some("/sys/devices/platform/odm/odm:tran_battery/tran_call_state"))
     }
 
     pub fn setChargingModeInGsmCall(&self, a0: &str) -> i32 {
@@ -342,7 +342,7 @@ impl Charger {
     }
 
     pub fn getPsyBatterySN(&self) -> String {
-        read_node_str_single("/sys/class/oplus_chg/battery/battery_sn")
+        read_node_str("/sys/class/power_supply/tran-auto-test/battery_id", Some("/sys/class/oplus_chg/battery/battery_sn"))
     }
 
     pub fn getBattGaugeInfo(&self) -> String {

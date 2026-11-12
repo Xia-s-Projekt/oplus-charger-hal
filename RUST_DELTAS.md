@@ -116,3 +116,69 @@ for the process).
 `txn_<MethodName>` names (kept so the names match the AIDL methods one to one),
 `non_camel_case_types` on the hand-written `libc` shim types, and dead-code
 warnings for fields the C++ also only writes.
+
+## 11. X6739 node remapping
+
+The stock HAL reads `/sys/class/oplus_chg/**`, `/sys/class/power_supply/usb/**`
+and `/proc/charger/**`. None of those exist on this device: 130 of the 149 node
+paths in the port are missing, and the charging stack is MediaTek with
+Transsion additions (`/sys/class/power_supply/mtk-*`,
+`/sys/devices/platform/charger/**`, `/sys/class/power_supply/tran-auto-test/**`,
+`/sys/devices/platform/odm/odm:tran_battery/**`).
+
+Every remap keeps the Oplus path as the primary and puts the X6739 path in the
+secondary slot of `readNodeInt`/`writeNode`, so behaviour on Oplus hardware is
+unchanged and only the X6739 fallback is new. Node existence and a sample value
+were read off the device before each mapping.
+
+| Oplus node | X6739 node | evidence |
+|---|---|---|
+| `/sys/class/power_supply/ac/type` | `/sys/devices/platform/charger/Charger_Type` | exists, `4` while charging |
+| `/sys/class/oplus_chg/battery/ppschg_ing` | `/sys/devices/platform/charger/fast_chg_indicator` | exists, `1` while charging |
+| `/sys/class/power_supply/battery/sub_current` | `/sys/class/power_supply/battery/current_avg` | exists, `8400` |
+| `/sys/class/power_supply/ac/online` | `/sys/class/power_supply/mtk-master-charger/online` | exists, `1` |
+| `/sys/class/power_supply/battery/short_c_hw_status` | `/sys/devices/platform/charger/cc_smt_status` | exists, `1` |
+| `/proc/charger/input_current_now` | `/sys/class/power_supply/charger/input_current_limit` | exists, `1200` |
+| `/sys/class/power_supply/usb/usb_status` | `/sys/class/power_supply/charger/online` | exists, `1` |
+| `/sys/class/power_supply/usb/input_current_now` | `/sys/class/power_supply/charger/input_current_limit` | same node as above |
+| `/sys/class/power_supply/usb/primal_type` | `/sys/devices/platform/charger/chr_type` | exists, `5` (PD) |
+| `/sys/class/oplus_chg/battery/gsm_call_ongoing` | `/sys/devices/platform/odm/odm:tran_battery/tran_call_state` | exists, `0` |
+| `/sys/class/oplus_chg/battery/battery_sn` | `/sys/class/power_supply/tran-auto-test/battery_id` | exists, `0` |
+| `/sys/class/oplus_chg/battery/em_mode` (write) | `/sys/devices/platform/charger/enable_meta_current_limit` | exists, `1` |
+| `/sys/class/oplus_chg/battery/cool_down` (write) | `/sys/devices/platform/charger/Thermal_throttle` | exists, `0` |
+| `/sys/class/oplus_chg/battery/ship_mode` (write) | `/sys/devices/platform/charger/shipmode_enable` | exists, empty |
+
+`setPsyMmiChgEn` needed its own branch: the device has no
+`mmi_charging_enable`, and `/sys/class/power_supply/battery/disable` is the
+inverse of it, so the value is inverted before the write. `getPsyUsbOnline`
+already had a `/sys/class/power_supply/charger/online` fallback and
+`getPsyOtgOnline` already had the `/sys/class/udc/11201000.usb0/is_otg`
+fallback, so neither needed a change. `setPsyOtgSwitch` already writes
+`odm:tran_battery/OTG_CTL`, which exists and is `rw-rw-rw`.
+
+Left unmapped on purpose, with no equivalent on this device:
+`/proc/wireless/**`, `/sys/class/power_supply/wireless/**` and
+`/sys/class/oplus_wireless/pencil/**` (no wireless charging hardware),
+`/dev/oplus_chg` and `/dev/chg_test_kit` (Oplus-only ioctl devices),
+`battery_authenticate`, `battery_charge_technology`, `chip_soc`,
+`battery_voltage_min`, `battery_charge_now`, `parallel_chg_mos_status`,
+`short_ic_otp_status`, `ppschg_power`, `usb_fast_chg_type`, `soc_ajust`,
+`chg_olc_config`, `super_endurance_mode_*`, `bob_status`, `slow_chg_en`,
+`battlog_push_config`, `chargerid_volt`, `gauge_info`, `battery_type`.
+`chargerid_volt` was checked and deliberately skipped: the Oplus node is in
+uV, `/sys/devices/platform/charger/ADC_Charger_Voltage` is in mV, so mapping
+it would report a value 1000x off.
+
+## 12. Wattage below 25 W is reported as 0
+
+`kMinReportWatts = 25` (`ChargerConstants.h:57`). A sub-25 W reading is the
+5 W / 10 W baseline a stock charger reports, not a rated adapter, so
+`reportWatts()` clamps it to 0 before it reaches the detector state, the
+`chg_power_watts` entry in the queryChargeInfo dump, `getPowerWatts()` and the
+monitor's "Power change detected" log line. The Rust mirrors it as
+`report_watts()` in `fastcharge.rs` and a clamp in `monitor.rs`.
+
+This is the only intentional behaviour change in the port: everything else is
+the shipped logic on different node paths. The classification thresholds are
+untouched (33 W / 45 W), so a clamped reading can never have been a fast charge
+anyway.

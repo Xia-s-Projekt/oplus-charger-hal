@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use crate::charger::Charger;
-use crate::constants::{K_IO_ERROR, K_READ_ERROR, K_SUPER_VOOC_WATTS};
+use crate::constants::{K_IO_ERROR, K_MIN_REPORT_WATTS, K_READ_ERROR, K_SUPER_VOOC_WATTS};
 use crate::decimal::Throttle;
 use crate::nodes;
 use crate::props;
@@ -207,6 +207,9 @@ pub fn run_monitor_loop(charger: &Charger, stop: &std::sync::atomic::AtomicBool)
             }
         }
         if online == 0 && (status == "Discharging" || status == "Not charging") {
+            watts = 0;
+        }
+        if watts < K_MIN_REPORT_WATTS {
             watts = 0;
         }
 

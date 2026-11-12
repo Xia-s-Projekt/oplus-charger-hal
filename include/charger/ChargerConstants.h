@@ -54,6 +54,11 @@ const char* chargeTechnologyName(int id);
 const int kFastChargeWatts = 33;
 const int kSuperVoocWatts = 45;
 
+// Anything below this is not a real adapter rating: it is the 5 W / 10 W
+// baseline a stock charger reports, and the framework would show it as a
+// charge wattage.  Report 0 instead.
+const int kMinReportWatts = 25;
+
 // ---------------------------------------------------------------------------
 // Oplus native nodes (present only when the oplus_chg driver is loaded).
 // ---------------------------------------------------------------------------

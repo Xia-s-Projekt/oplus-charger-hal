@@ -92,7 +92,7 @@ echo
 echo "== node paths =="
 for path in /sys/devices/platform/charger/Pump_Express \
             /sys/devices/platform/charger/adapter_capacity \
-            /sys/class/power_supply/battery/fast_charge \
+            /sys/devices/platform/charger/fast_chg_indicator \
             /sys/class/oplus_chg/battery/charge_technology; do
     if grep -qx "$path" "$WORK/strings.txt"; then
         echo "PASS  $path"

@@ -14,6 +14,19 @@
 // separate signal, reported on its own; it does not gate the classification.
 
 use crate::constants::{self, ChargeTechnology, K_READ_ERROR};
+
+// A sub-25 W reading is a stock charger baseline, not a rated adapter, so
+// it is reported as 0 and never surfaces as a charge wattage.
+fn report_watts(watts: i32) -> i32 {
+    if watts <= 0 || watts == constants::K_READ_ERROR || watts == constants::K_IO_ERROR {
+        return 0;
+    }
+    if watts < constants::K_MIN_REPORT_WATTS {
+        return 0;
+    }
+    watts
+}
+
 use crate::nodes;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -132,7 +145,7 @@ impl FastChargeDetector {
         Some(FastChargeState {
             fast_chg_type: ty as i32,
             fast_charge,
-            watts,
+            watts: report_watts(watts),
             pump_engaged: fast_charge != 0,
             valid: true,
             from_oplus_driver: true,
@@ -163,7 +176,7 @@ impl FastChargeDetector {
         }
 
         state.pump_engaged = pump != 0;
-        state.watts = watts;
+        state.watts = report_watts(watts);
         state.fast_chg_type = Self::classify_watts(watts) as i32;
         state.fast_charge = if state.fast_chg_type == ChargeTechnology::Vooc as i32
             || state.fast_chg_type == ChargeTechnology::Svooc as i32

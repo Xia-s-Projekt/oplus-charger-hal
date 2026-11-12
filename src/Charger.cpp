@@ -147,7 +147,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getAcType(int* _out) {
-    int val = readNodeInt("/sys/class/power_supply/ac/type", "/sys/class/oplus_chg/ac/type");
+    int val = readNodeInt("/sys/class/power_supply/ac/type", "/sys/devices/platform/charger/Charger_Type");
     *_out = (val == kReadError || val == kIoError || val == kParseError) ? 0 : val;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -158,7 +158,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getBattPPSChgIng(int* _out) {
-    int val = readNodeIntSingle("/sys/class/oplus_chg/battery/ppschg_ing");
+    int val = readNodeInt("/sys/class/oplus_chg/battery/ppschg_ing", "/sys/devices/platform/charger/fast_chg_indicator");
     *_out = (val == kReadError || val == kIoError || val == kParseError) ? 0 : val;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -188,7 +188,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getBattSubCurrent(int* _out) {
-    *_out = readNodeInt("/sys/class/power_supply/battery/sub_current", "/sys/class/oplus_chg/battery/sub_current");
+    *_out = readNodeInt("/sys/class/power_supply/battery/sub_current", "/sys/class/power_supply/battery/current_avg");
     return ::ndk::ScopedAStatus::ok();
 }
 
@@ -228,7 +228,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyAcOnline(int* _out) {
-    int val = readNodeInt("/sys/class/power_supply/ac/online", "/sys/class/oplus_chg/ac/online");
+    int val = readNodeInt("/sys/class/power_supply/ac/online", "/sys/class/power_supply/mtk-master-charger/online");
     *_out = (val == kReadError || val == kIoError || val == kParseError) ? 0 : val;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -292,7 +292,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyBatteryShortStatus(int* _out) {
-    int val = readNodeInt("/sys/class/power_supply/battery/short_c_hw_status", "/sys/class/oplus_chg/battery/short_c_hw_status");
+    int val = readNodeInt("/sys/class/power_supply/battery/short_c_hw_status", "/sys/devices/platform/charger/cc_smt_status");
     *_out = (val == kReadError || val == kIoError || val == kParseError) ? 0 : val;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -308,7 +308,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyInputCurrent(int* _out) {
-    int val = readNodeIntSingle("/proc/charger/input_current_now");
+    int val = readNodeInt("/proc/charger/input_current_now", "/sys/class/power_supply/charger/input_current_limit");
     *_out = (val == kReadError || val == kIoError || val == kParseError) ? 0 : val;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -360,7 +360,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyUsbStatus(int* _out) {
-    int val = readNodeInt("/sys/class/power_supply/usb/usb_status", "/sys/class/oplus_chg/usb/usb_status");
+    int val = readNodeInt("/sys/class/power_supply/usb/usb_status", "/sys/class/power_supply/charger/online");
     if (val == kReadError || val == kIoError || val == kParseError) {
         val = 0;
     }
@@ -404,12 +404,12 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getUsbInputCurrentNow(int* _out) {
-    *_out = readNodeInt("/sys/class/power_supply/usb/input_current_now", "/sys/class/oplus_chg/usb/input_current_now");
+    *_out = readNodeInt("/sys/class/power_supply/usb/input_current_now", "/sys/class/power_supply/charger/input_current_limit");
     return ::ndk::ScopedAStatus::ok();
 }
 
 ::ndk::ScopedAStatus Charger::getUsbPrimalType(int* _out) {
-    *_out = readNodeInt("/sys/class/power_supply/usb/primal_type", "/sys/class/oplus_chg/usb/primal_type");
+    *_out = readNodeInt("/sys/class/power_supply/usb/primal_type", "/sys/devices/platform/charger/chr_type");
     return ::ndk::ScopedAStatus::ok();
 }
 
@@ -488,12 +488,12 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::setChargeEMMode(const std::string& value0, int* _out) {
-    *_out = writeNode("/sys/class/power_supply/battery/em_mode", "/sys/class/oplus_chg/battery/em_mode", value0);
+    *_out = writeNode("/sys/class/power_supply/battery/em_mode", "/sys/devices/platform/charger/enable_meta_current_limit", value0);
     return ::ndk::ScopedAStatus::ok();
 }
 
 ::ndk::ScopedAStatus Charger::setChargerCoolDown(const std::string& value0, int* _out) {
-    *_out = writeNode("/sys/class/power_supply/battery/cool_down", "/sys/class/oplus_chg/battery/cool_down", value0);
+    *_out = writeNode("/sys/class/power_supply/battery/cool_down", "/sys/devices/platform/charger/Thermal_throttle", value0);
     return ::ndk::ScopedAStatus::ok();
 }
 
@@ -532,7 +532,14 @@ int writeNode(const char* primary, const char* secondary,
             writeNode("/sys/devices/platform/charger/tran_aichg_disable_charger", nullptr, "0");
         }
     }
-    int rc = writeNode("/sys/class/power_supply/battery/mmi_charging_enable", "/sys/class/oplus_chg/battery/mmi_charging_enable", value0);
+    int rc;
+    if (writeNode("/sys/class/power_supply/battery/mmi_charging_enable", "/sys/class/oplus_chg/battery/mmi_charging_enable", value0) == kReadError) {
+        // X6739 has no mmi_charging_enable; battery/disable is the inverse
+        rc = writeNode("/sys/class/power_supply/battery/disable", nullptr,
+                         (value0 == "0" || value0 == "false") ? "1" : "0");
+    } else {
+        rc = 0;
+    }
     *_out = (rc < 0) ? 0 : rc;
     return ::ndk::ScopedAStatus::ok();
 }
@@ -553,7 +560,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::setShipMode(const std::string& value0, int* _out) {
-    *_out = writeNode("/sys/class/power_supply/battery/ship_mode", "/sys/class/oplus_chg/battery/ship_mode", value0);
+    *_out = writeNode("/sys/class/power_supply/battery/ship_mode", "/sys/devices/platform/charger/shipmode_enable", value0);
     return ::ndk::ScopedAStatus::ok();
 }
 
@@ -658,7 +665,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getChargingModeInGsmCall(int* _out) {
-    *_out = readNodeIntSingle("/sys/class/oplus_chg/battery/gsm_call_ongoing");
+    *_out = readNodeInt("/sys/class/oplus_chg/battery/gsm_call_ongoing", "/sys/devices/platform/odm/odm:tran_battery/tran_call_state");
     return ::ndk::ScopedAStatus::ok();
 }
 
@@ -668,7 +675,7 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyBatterySN(std::string* _out) {
-    *_out = readNodeStrSingle("/sys/class/oplus_chg/battery/battery_sn");
+    *_out = readNodeStr("/sys/class/power_supply/tran-auto-test/battery_id", "/sys/class/oplus_chg/battery/battery_sn");
     return ::ndk::ScopedAStatus::ok();
 }
 

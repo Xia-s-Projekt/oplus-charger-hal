@@ -397,6 +397,9 @@ void Charger::runMonitorLoop() {
         if (online == 0 && (status == "Discharging" || status == "Not charging")) {
             watts = 0;
         }
+        if (watts < kMinReportWatts) {
+            watts = 0;
+        }
 
         now = std::chrono::steady_clock::now();
         bool stateChanged = (watts != lastWatts || online != lastOnline || status != lastStatus);
@@ -511,9 +514,12 @@ int toExternalChargeTechnology(int internalTech) {
 // Shipped ELF 0x1cf54: reads voocchg_ing, and when the wireless driver
 // holds the status the cached value is returned instead.
 ::ndk::ScopedAStatus Charger::getBattVoocChgIng(int* _out) {
-    int value = readIntPath("/sys/class/power_supply/battery/voocchg_ing");
+    int value = readIntPath("/sys/devices/platform/charger/fast_chg_indicator");
     if (value == kReadError || value == kIoError) {
         value = readIntPath("/sys/class/oplus_chg/battery/voocchg_ing");
+        if (value == kReadError || value == kIoError) {
+            value = readIntPath("/sys/devices/platform/charger/fast_chg_indicator");
+        }
     }
     if (value == kReadError || value == kIoError) {
         value = mFastCharge ? (mFastCharge->getChargeTechnology() ==
@@ -1042,17 +1048,17 @@ bool bypassChargeSupported() {
     appendInt(_out, "battery_charge_now",
               readIntPath("/sys/class/power_supply/battery/charge_now"));
     appendInt(_out, "battery_sub_current",
-              readIntPath("/sys/class/power_supply/battery/sub_current"));
+              readIntPath("/sys/class/power_supply/battery/current_avg"));
     appendInt(_out, "usb_fast_chg_type",
               readIntPath("/sys/class/power_supply/usb/fast_chg_type"));
     appendInt(_out, "battery_voocchg_ing",
-              readIntPath("/sys/class/power_supply/battery/voocchg_ing"));
+              readIntPath("/sys/devices/platform/charger/fast_chg_indicator"));
     appendInt(_out, "battery_ppschg_ing",
-              readIntPath("/sys/class/oplus_chg/battery/ppschg_ing"));
+              readIntPath("/sys/devices/platform/charger/fast_chg_indicator"));
     appendInt(_out, "battery_ppschg_power",
               readIntPath("/sys/class/oplus_chg/battery/ppschg_power"));
     appendInt(_out, "usb_input_current_now",
-              readIntPath("/sys/class/power_supply/usb/input_current_now"));
+              readIntPath("/sys/class/power_supply/charger/input_current_limit"));
     appendInt(_out, "battery_short_ic_otp_status",
               readIntPath("/sys/class/power_supply/battery/short_ic_otp_status"));
     appendInt(_out, "battery_authenticate",
@@ -1110,7 +1116,7 @@ bool bypassChargeSupported() {
 
 ::ndk::ScopedAStatus Charger::getBccCsvData(std::string* _out) {
     _out->clear();
-    appendInt(_out, "cool_down", readIntPath("/sys/class/power_supply/battery/cool_down"));
+    appendInt(_out, "cool_down", readIntPath("/sys/devices/platform/charger/Thermal_throttle"));
     appendInt(_out, "chip_soc", readIntPath("/sys/class/power_supply/battery/chip_soc"));
     appendInt(_out, "capacity", readIntPath("/sys/class/power_supply/battery/capacity"));
     appendString(_out, "status",

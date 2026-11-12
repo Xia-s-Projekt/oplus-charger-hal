@@ -1,6 +1,6 @@
 /*
  * This file is auto-generated.  DO NOT MODIFY.
- * Using: /opt/android-sdk/build-tools/35.0.0/aidl --lang=ndk --structured --stability=vintf --version=3 --hash=587d614e5ed419609cd450643820624cf151d465 -I /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/aidl --header_out=/mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/standalone/build/aidl_gen -o /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/standalone/build/aidl_gen /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/aidl/vendor/oplus/hardware/charger/ICharger.aidl
+ * Using: /opt/android-sdk/build-tools/35.0.0/aidl --lang=ndk --structured --stability=vintf --version=6 --hash=ede5e600328119dbf1c38269f810a3fdce74029f -I /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/aidl --header_out=/mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/standalone/build/aidl_gen -o /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/standalone/build/aidl_gen /mnt/project/RomTools/ROM_WORKDIR/oos/ReconstructedHALSource/Oplus/OplusCharger/aidl/vendor/oplus/hardware/charger/ICharger.aidl
  */
 #pragma once
 
@@ -32,8 +32,8 @@ public:
   ICharger();
   virtual ~ICharger();
 
-  static inline const int32_t version = 3;
-  static inline const std::string hash = "587d614e5ed419609cd450643820624cf151d465";
+  static inline const int32_t version = 6;
+  static inline const std::string hash = "ede5e600328119dbf1c38269f810a3fdce74029f";
   static constexpr uint32_t TRANSACTION_VolDividerIcWorkModeSet = FIRST_CALL_TRANSACTION + 0;
   static constexpr uint32_t TRANSACTION_chgExchangeMesgInit = FIRST_CALL_TRANSACTION + 1;
   static constexpr uint32_t TRANSACTION_chgExchangeSohMesgInit = FIRST_CALL_TRANSACTION + 2;

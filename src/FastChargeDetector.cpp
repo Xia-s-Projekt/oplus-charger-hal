@@ -99,7 +99,7 @@ FastChargeDetector::FastChargeDetector(const FastChargeNodes& nodes) {
     mOplusFastCharge = nodes.oplusFastCharge
             ? nodes.oplusFastCharge
             : nodePathOrDefault(kEnvOplusFastCharge,
-                                "/sys/class/oplus_chg/battery/fast_charge");
+                                "/sys/devices/platform/charger/fast_chg_indicator");
     mOplusPpschgPower = nodes.oplusPpschgPower
             ? nodes.oplusPpschgPower
             : "/sys/class/oplus_chg/battery/ppschg_power";
@@ -108,7 +108,7 @@ FastChargeDetector::FastChargeDetector(const FastChargeNodes& nodes) {
             : "/sys/class/power_supply/battery/charge_technology";
     mPowerSupplyFastCharge = nodes.powerSupplyFastCharge
             ? nodes.powerSupplyFastCharge
-            : "/sys/class/power_supply/battery/fast_charge";
+            : "/sys/devices/platform/charger/fast_chg_indicator";
     mPumpExpress = nodes.pumpExpress
             ? nodes.pumpExpress
             : nodePathOrDefault(kEnvPumpExpress, tran::kPumpExpress);
@@ -120,6 +120,15 @@ FastChargeDetector::FastChargeDetector(const FastChargeNodes& nodes) {
             : nodePathOrDefault("OPLUS_CHARGER_FAST_INDICATOR_NODE",
                                 "/sys/devices/platform/charger/fast_chg_indicator");
     refresh();
+}
+
+// A sub-25 W reading is a stock charger baseline, not a rated adapter, so it
+// is reported as 0 and never surfaces as a charge wattage.
+static int reportWatts(int watts) {
+    if (watts <= 0 || watts == kReadError || watts == kIoError) {
+        return 0;
+    }
+    return (watts < kMinReportWatts) ? 0 : watts;
 }
 
 int FastChargeDetector::classifyWatts(int watts) {
@@ -179,7 +188,7 @@ bool FastChargeDetector::readOplusDriver(FastChargeState* state) const {
 
     state->fastChgType = type;
     state->fastCharge = fastCharge;
-    state->watts = watts;
+    state->watts = reportWatts(watts);
     state->pumpEngaged = (fastCharge != 0);
     state->fromOplusDriver = true;
     state->valid = true;
@@ -224,7 +233,7 @@ bool FastChargeDetector::readTranCharger(FastChargeState* state) const {
     }
 
     state->pumpEngaged = (pump != 0);
-    state->watts = watts;
+    state->watts = reportWatts(watts);
     state->fastChgType = classifyWatts(watts);
     // The watts decide: a 33 W..44 W adapter is a fast charge, 45 W and up
     // is SuperVOOC.  The pump is a separate signal (it is reported on its
