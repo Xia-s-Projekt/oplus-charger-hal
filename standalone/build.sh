@@ -96,7 +96,9 @@ BINDER_HEADERS="$(find_binder_platform_headers)" || {
 BINDER_LIB="$(find_libbinder_ndk)" || {
     echo "ERROR: no usable libbinder_ndk.so found (need AServiceManager_addService)"; exit 1; }
 CXX="$TOOLCHAIN/bin/aarch64-linux-android${API}-clang++"
+LLVM_STRIP="$TOOLCHAIN/bin/llvm-strip"
 [ -x "$CXX" ] || { echo "ERROR: $CXX is missing"; exit 1; }
+[ -x "$LLVM_STRIP" ] || { echo "ERROR: $LLVM_STRIP is missing"; exit 1; }
 SYSROOT="$TOOLCHAIN/sysroot"
 
 echo "toolchain : $TOOLCHAIN"
@@ -204,4 +206,10 @@ OUT="$DIST/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service"
 
 echo "== built =="
 ls -l "$OUT"
+
+# Ship a stripped binary: the .symtab is 8k+ symbols of local names and source
+# paths.  It is dead weight in /vendor and the only thing that ever needed it
+# was host-side symbolization of a logcat backtrace.
+"$LLVM_STRIP" --strip-unneeded "$OUT"
+
 "$HERE/verify.sh" "$OUT"
