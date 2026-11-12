@@ -1,0 +1,21 @@
+[package]
+name = "oplus-charger-rust"
+version = "0.1.0"
+edition = "2021"
+
+# Static libc++ so the HAL does not depend on a vendor-provided libc++_shared.
+[profile.release]
+opt-level = 2
+panic = "abort"
+lto = false
+
+[lib]
+name = "oplus_charger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "charger"
+path = "src/main.rs"
+# The bin links libbinder_ndk, which only exists for the Android target, so
+# host `cargo test` must not build it.
+test = false

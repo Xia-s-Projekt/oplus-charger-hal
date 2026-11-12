@@ -1,0 +1,9 @@
+getBattPPSChgPower
+getPsyBatteryFcc
+getPsyBatteryRm
+getPsyOtgOnline
+getPsyOtgSwitch
+getPsyUsbOnline
+getPsyUsbStatus
+setPsyMmiChgEn
+setPsyOtgSwitch
