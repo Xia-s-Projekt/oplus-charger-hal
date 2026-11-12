@@ -1,4 +1,5 @@
 getBattPPSChgPower
+getChargerIdVolt
 getPsyBatteryFcc
 getPsyBatteryRm
 getPsyOtgOnline

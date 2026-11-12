@@ -45,10 +45,6 @@ impl Charger {
         read_node_int_single("/proc/charger_critical_log")
     }
 
-    pub fn getChargerIdVolt(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/battery/chargerid_volt", Some("/sys/class/oplus_chg/battery/chargerid_volt"))
-    }
-
     pub fn getChargerLog(&self) -> i32 {
         read_node_int_single("/proc/charger_log")
     }

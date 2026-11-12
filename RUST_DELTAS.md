@@ -147,6 +147,16 @@ were read off the device before each mapping.
 | `/sys/class/oplus_chg/battery/em_mode` (write) | `/sys/devices/platform/charger/enable_meta_current_limit` | exists, `1` |
 | `/sys/class/oplus_chg/battery/cool_down` (write) | `/sys/devices/platform/charger/Thermal_throttle` | exists, `0` |
 | `/sys/class/oplus_chg/battery/ship_mode` (write) | `/sys/devices/platform/charger/shipmode_enable` | exists, empty |
+| `/sys/class/oplus_chg/battery/chargerid_volt` | `/sys/devices/platform/charger/ADC_Charger_Voltage` | exists, `4993` (mV) |
+
+`getChargerIdVolt` reads the MTK node through a scale adapter: `ADC_Charger_Voltage`
+is in mV while the Oplus node is in uV, so the fallback value is multiplied
+by 1000 before it is reported (`* 1000` in C++, `val *= 1000` in Rust). The
+framework consumer (`OplusBatteryService.writeCriticalLog`, classes.dex)
+appends the int verbatim under the label `chargerid_volt:`, so the unit
+convention is the Oplus driver's and is not verifiable inside this tree; the
+mV side is - `ADC_Charger_Voltage` reads 4993 on a 5 V adapter. Error returns
+are passed through unscaled, so a missing node still reports `kReadError`.
 
 `setPsyMmiChgEn` needed its own branch: the device has no
 `mmi_charging_enable`, and `/sys/class/power_supply/battery/disable` is the
@@ -164,10 +174,7 @@ Left unmapped on purpose, with no equivalent on this device:
 `battery_voltage_min`, `battery_charge_now`, `parallel_chg_mos_status`,
 `short_ic_otp_status`, `ppschg_power`, `usb_fast_chg_type`, `soc_ajust`,
 `chg_olc_config`, `super_endurance_mode_*`, `bob_status`, `slow_chg_en`,
-`battlog_push_config`, `chargerid_volt`, `gauge_info`, `battery_type`.
-`chargerid_volt` was checked and deliberately skipped: the Oplus node is in
-uV, `/sys/devices/platform/charger/ADC_Charger_Voltage` is in mV, so mapping
-it would report a value 1000x off.
+`battlog_push_config`, `gauge_info`, `battery_type`.
 
 ## 12. Wattage below 25 W is reported as 0
 

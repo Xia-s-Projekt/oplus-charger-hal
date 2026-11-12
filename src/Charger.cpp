@@ -208,7 +208,15 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getChargerIdVolt(int* _out) {
-    *_out = readNodeInt("/sys/class/power_supply/battery/chargerid_volt", "/sys/class/oplus_chg/battery/chargerid_volt");
+    // The MTK ADC node is in mV, the Oplus node is in uV, so the fallback is
+    // scaled before it is reported.
+    int val = readNodeInt("/sys/class/power_supply/battery/chargerid_volt",
+                          "/sys/devices/platform/charger/ADC_Charger_Voltage");
+    if (val == kReadError || val == kIoError || val == kParseError) {
+        *_out = val;
+        return ::ndk::ScopedAStatus::ok();
+    }
+    *_out = (val != 0) ? val * 1000 : 0;
     return ::ndk::ScopedAStatus::ok();
 }
 

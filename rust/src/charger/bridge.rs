@@ -37,9 +37,6 @@ impl Charger {
     pub(crate) fn txn_getChargerCriticalLog(&self) -> i32 {
         self.getChargerCriticalLog()
     }
-    pub(crate) fn txn_getChargerIdVolt(&self) -> i32 {
-        self.getChargerIdVolt()
-    }
     pub(crate) fn txn_getChargerLog(&self) -> i32 {
         self.getChargerLog()
     }

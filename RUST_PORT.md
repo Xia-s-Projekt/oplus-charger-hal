@@ -137,13 +137,15 @@ verified, `[ ]` not done.
 - [x] 7.5 transaction-code parity — all 130 codes read from the stock
       `oos15_old` V6 `BpCharger` disassembly match `txn.rs`
 - [ ] 7.6 A/B comparison: run both HALs on device, diff every getter's answer
-- [ ] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — currently staged only to
-      `standalone/dist/vendor/bin/hw/` (md5 `c28297d51fd4065806820a7981ebcb5a`)
+- [x] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — staged, md5
+      `e9ae132c825dcbb88027a24d8f27b9f8` (the Rust build with the V6 answer,
+      the X6739 node remap, the 25 W floor and the chargerid_volt scale
+      adapter). The pre-remap C++ build it replaced is kept at
+      `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V6-service.preremap.bak`
 - [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and
       `standalone/build.sh` now answer/generate version 6 / hash
       `ede5e600328119dbf1c38269f810a3fdce74029f`, matching the stock V6 HAL.
-      The binary staged in `erofs/vendor/bin/hw/` is still the old C++ build
-      that answers 3 — replace it before repack+flash (`RUST_DELTAS.md` §3)
+      The erofs binary now answers 6 (`RUST_DELTAS.md` §3)
 - [ ] 7.9 commit in the charger HAL git repo (the `rust/` tree is still untracked)
 
 ## Feature inventory (must not be missed)

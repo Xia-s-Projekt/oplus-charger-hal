@@ -826,6 +826,19 @@ impl Charger {
 
     // --- hand-written accessors ------------------------------------------
 
+    // The MTK ADC node is in mV, the Oplus node is in uV, so the fallback is
+    // scaled before it is reported.
+    pub(crate) fn txn_getChargerIdVolt(&self) -> i32 {
+        let mut val = nodes::read_node_int(
+            "/sys/class/power_supply/battery/chargerid_volt",
+            Some("/sys/devices/platform/charger/ADC_Charger_Voltage"),
+        );
+        if !nodes::is_error(val) && val != 0 {
+            val *= 1000;
+        }
+        val
+    }
+
     pub(crate) fn txn_getBattPPSChgPower(&self) -> i32 {
         let cap_path = std::env::var("OPLUS_CHARGER_CAPACITY_NODE")
             .ok()
