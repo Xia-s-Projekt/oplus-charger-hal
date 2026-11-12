@@ -139,8 +139,11 @@ verified, `[ ]` not done.
 - [ ] 7.6 A/B comparison: run both HALs on device, diff every getter's answer
 - [ ] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — currently staged only to
       `standalone/dist/vendor/bin/hw/` (md5 `c28297d51fd4065806820a7981ebcb5a`)
-- [ ] 7.8 resolve the VINTF `<version>6</version>` vs `--version=3` mismatch **before** repack+flash
-      — evidence and the two options are in `RUST_DELTAS.md` §3
+- [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and
+      `standalone/build.sh` now answer/generate version 6 / hash
+      `ede5e600328119dbf1c38269f810a3fdce74029f`, matching the stock V6 HAL.
+      The binary staged in `erofs/vendor/bin/hw/` is still the old C++ build
+      that answers 3 — replace it before repack+flash (`RUST_DELTAS.md` §3)
 - [ ] 7.9 commit in the charger HAL git repo (the `rust/` tree is still untracked)
 
 ## Feature inventory (must not be missed)
@@ -170,8 +173,8 @@ Reference binaries:
 |---|---|
 | Method names, order, count | identical, 130 |
 | Transaction codes (immediate before `AIBinder_transact`) | identical |
-| Interface version | stock 6, ours 3 — see `RUST_DELTAS.md` §3 |
-| Interface hash | stock `ede5e600…`, ours `587d614e…` — §3 |
+| Interface version | stock 6, ours 6 — matched (`RUST_DELTAS.md` §3) |
+| Interface hash | stock `ede5e600…`, ours `ede5e600…` — §3 |
 | Node paths | stock Qualcomm `/sys/class/oplus_chg/`, ours Transsion `/sys/devices/platform/charger/` — the X6739 patch |
 | Per-method bodies | not yet diffed method by method |
 

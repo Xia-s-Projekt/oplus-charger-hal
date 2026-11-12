@@ -124,8 +124,8 @@ for f in "$ROOT"/aidl/vendor/oplus/hardware/charger/*.aidl; do
         --lang=ndk \
         --structured \
         --stability=vintf \
-        --version=3 \
-        --hash=587d614e5ed419609cd450643820624cf151d465 \
+        --version=6 \
+        --hash=ede5e600328119dbf1c38269f810a3fdce74029f \
         -I "$ROOT/aidl" \
         --header_out="$GEN" \
         -o "$GEN" \

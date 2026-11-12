@@ -12,8 +12,14 @@
 // getInterfaceVersion / getInterfaceHash are the AIDL stable-interface
 // negotiation transactions.  The generated server answers them with
 // ICharger::version and ICharger::hash from the generated header
-// (--version=3 --hash=587d614e5ed419609cd450643820624cf151d465), so this
+// (--version=6 --hash=ede5e600328119dbf1c38269f810a3fdce74029f), so this
 // dispatcher answers with the same two constants.
+
+// The stock oos15_old V6 HAL answers 6 / ede5e600..., and our VINTF manifest
+// declares <version>6</version>, so the port matches it.  Evidence: the
+// stock lib64/vendor.oplus.hardware.charger-V6-ndk_platform.so has
+// `mov w9, #0x6` in BnCharger::getInterfaceVersion (.text 0x20bd0), and
+// ede5e600... is the only 40-hex string in that library.
 
 use crate::binder::{Parcel, STATUS_OK, STATUS_UNKNOWN_TRANSACTION};
 use crate::charger::Charger;
@@ -24,8 +30,8 @@ pub struct TestKitResult {
 }
 
 // ICharger.h:35-36, from the aidl invocation that generated the stubs.
-pub const INTERFACE_VERSION: i32 = 3;
-pub const INTERFACE_HASH: &str = "587d614e5ed419609cd450643820624cf151d465";
+pub const INTERFACE_VERSION: i32 = 6;
+pub const INTERFACE_HASH: &str = "ede5e600328119dbf1c38269f810a3fdce74029f";
 
 // android.os.IBinder.FIRST_CALL_TRANSACTION + 16777214 / + 16777213.
 const TXN_GET_INTERFACE_VERSION: u32 = 0xFFFFFF;
@@ -37,6 +43,9 @@ pub const METHOD_COUNT: usize = 130;
 /// Dispatch one transaction.  Mirrors the generated C++
 /// _aidl_..._onTransact switch statement for statement.
 pub fn dispatch(c: &Charger, code: u32, in_p: &Parcel, out_p: &mut Parcel) -> i32 {
+    if let Some(status) = dispatch_interface_query(code, out_p) {
+        return status;
+    }
     match code {
         1 => {
             let a0 = match in_p.read_string() {
