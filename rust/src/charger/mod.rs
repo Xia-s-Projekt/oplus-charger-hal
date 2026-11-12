@@ -41,6 +41,10 @@ pub struct ChargerState {
     pub chg_config: HashMap<i32, String>,
     pub usb_eye_diagram: HashMap<i32, String>,
     pub bypass: BypassInputs,
+    /// MMI factory-mode charging disable (setPsyMmiChgEn).  A request on the
+    /// bypass node, kept out of the policy Inputs and folded into the
+    /// decision by apply_bypass_policy.
+    pub mmi_charging_disabled: i32,
 }
 
 impl Default for ChargerState {
@@ -63,6 +67,7 @@ impl Default for ChargerState {
             chg_config: HashMap::new(),
             usb_eye_diagram: HashMap::new(),
             bypass: BypassInputs::default(),
+            mmi_charging_disabled: 0,
         }
     }
 }
@@ -193,33 +198,33 @@ impl Charger {
     /// it decided on, or -1 when nothing is requesting bypass and the node
     /// must be left alone.
     pub(crate) fn apply_bypass_policy(&self, force: bool) -> i32 {
-        let (capacity, any_request, value) = {
+        let any_request;
+        let value;
+        {
             let mut st = self.lock_state();
-            st.bypass.capacity = Self::read_int_path("/sys/class/power_supply/battery/capacity");
-            let mut value = 0;
-            let any = bypass::decide(&st.bypass, &mut value);
-            (st.bypass.capacity, any, value)
-        };
-        let _ = capacity;
+            st.bypass.capacity =
+                Self::read_int_path("/sys/class/power_supply/battery/capacity");
+            let mut v = 0;
+            let any = bypass::decide(&st.bypass, &mut v);
+            // The MMI factory-mode disable is a request on the same node.
+            if st.mmi_charging_disabled != 0 {
+                any_request = true;
+                value = 1;
+            } else {
+                any_request = any;
+                value = v;
+            }
+        }
         if !any_request && !force {
             return -1;
         }
         let node = value.to_string();
-        Self::write_string_path(
-            constants::tran::BYPASS_CHARGER,
-            &node,
-        );
-        Self::write_string_path(
-            constants::tran::TRAN_AICHG_DISABLE_CHARGER,
-            &node,
-        );
-        // init re-applies the prop to the node on every boot
-        // (tran_optimize.rc), so the prop has to follow the node or the
-        // setting is lost across a reboot.  Only write on a change: writing
-        // the prop fires the init trigger, which writes the node back.
-        if props::is_bypass_prop_enabled() as i32 != value {
-            props::set_bypass_prop(value);
-        }
+        Self::write_string_path(constants::tran::BYPASS_CHARGER, &node);
+        Self::write_string_path(constants::tran::TRAN_AICHG_DISABLE_CHARGER, &node);
+        // The prop is the user's standing intent and only the user's toggle
+        // sets it: a transient decision (charge limit reached, GameSpace
+        // asked) must not persist, or init re-applies it at the next boot and
+        // the bypass engages at any capacity with the in-memory target lost.
         value
     }
 
@@ -915,29 +920,16 @@ impl Charger {
         val
     }
 
+    // The MMI factory-mode disable is a request on the bypass node, not a
+    // latch: recording it and re-deriving the node keeps the monitor able to
+    // clear it again, which a direct write could never do.
     pub(crate) fn txn_setPsyMmiChgEn(&self, a0: &str) -> i32 {
-        if a0 == "0" {
-            nodes::write_node(
-                constants::tran::BYPASS_CHARGER,
-                None,
-                "1",
-            );
-            nodes::write_node(
-                constants::tran::TRAN_AICHG_DISABLE_CHARGER,
-                None,
-                "1",
-            );
-        } else if a0 == "1" && !props::is_bypass_prop_enabled() {
-            nodes::write_node(
-                constants::tran::BYPASS_CHARGER,
-                None,
-                "0",
-            );
-            nodes::write_node(
-                constants::tran::TRAN_AICHG_DISABLE_CHARGER,
-                None,
-                "0",
-            );
+        {
+            let mut st = self.lock_state();
+            st.mmi_charging_disabled = if a0 == "0" { 1 } else { 0 };
+        }
+        if a0 == "0" || a0 == "1" {
+            self.apply_bypass_policy(true);
         }
         let rc = nodes::write_node(
             "/sys/class/power_supply/battery/mmi_charging_enable",

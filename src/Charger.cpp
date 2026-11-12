@@ -530,28 +530,6 @@ int writeNode(const char* primary, const char* secondary,
     return ::ndk::ScopedAStatus::ok();
 }
 
-::ndk::ScopedAStatus Charger::setPsyMmiChgEn(const std::string& value0, int* _out) {
-    if (value0 == "0") {
-        writeNode("/sys/devices/platform/charger/bypass_charger", nullptr, "1");
-        writeNode("/sys/devices/platform/charger/tran_aichg_disable_charger", nullptr, "1");
-    } else if (value0 == "1") {
-        if (!isBypassPropEnabled()) {
-            writeNode("/sys/devices/platform/charger/bypass_charger", nullptr, "0");
-            writeNode("/sys/devices/platform/charger/tran_aichg_disable_charger", nullptr, "0");
-        }
-    }
-    int rc;
-    if (writeNode("/sys/class/power_supply/battery/mmi_charging_enable", "/sys/class/oplus_chg/battery/mmi_charging_enable", value0) == kReadError) {
-        // X6739 has no mmi_charging_enable; battery/disable is the inverse
-        rc = writeNode("/sys/class/power_supply/battery/disable", nullptr,
-                         (value0 == "0" || value0 == "false") ? "1" : "0");
-    } else {
-        rc = 0;
-    }
-    *_out = (rc < 0) ? 0 : rc;
-    return ::ndk::ScopedAStatus::ok();
-}
-
 ::ndk::ScopedAStatus Charger::setPsyOtgSwitch(const std::string& value0, int* _out) {
     int parsed = (value0 == "1" || value0 == "true") ? 1 : ((value0 == "0" || value0 == "false") ? 0 : std::atoi(value0.c_str()));
     std::string valStr = (parsed == 1) ? "1" : "0";

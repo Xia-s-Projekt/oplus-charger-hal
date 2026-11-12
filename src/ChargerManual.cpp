@@ -148,6 +148,10 @@ struct ChargerState {
     // The bypass-charge requests, kept so the node can be re-derived from
     // them instead of being latched at whatever value a caller last sent.
     bypass::Inputs bypass;
+    // The MMI factory-mode charging disable (setPsyMmiChgEn).  It is a
+    // request on the same node, not an Oplus feature, so it is kept out of
+    // the policy Inputs and folded into the decision by applyBypassPolicy.
+    int mmiChargingDisabled = 0;
 };
 
 ChargerState& state() {
@@ -313,6 +317,7 @@ void Charger::runMonitorLoop() {
     auto onlineSinceTime = std::chrono::steady_clock::now();
     auto lastPulseTime = std::chrono::steady_clock::now();
     int lastBypassProp = -1;
+    int lastBypassNode = -1;
 
     const char* envCapNode = getenv("OPLUS_CHARGER_CAPACITY_NODE");
     const char* adapterCapacityPath = (envCapNode != nullptr && envCapNode[0] != '\0')
@@ -365,7 +370,25 @@ void Charger::runMonitorLoop() {
             }
             int applied = applyBypassPolicy(true);
             if (applied >= 0) {
+                lastBypassNode = applied;
                 triggerBatteryUpdate(true);
+            }
+        }
+
+        // Reconcile: the node can be left at 1 with nothing requesting it -
+        // an external writer, a transient decision from before the prop
+        // writeback was removed, or the charge limit that has since been
+        // crossed back below its target.  Re-derive it whenever the live
+        // node disagrees with the last decision, so the bypass can never
+        // stick on by itself.
+        int liveNode = readIntPath("/sys/devices/platform/charger/bypass_charger");
+        if (liveNode != kReadError && liveNode != kIoError && liveNode != lastBypassNode) {
+            int applied = applyBypassPolicy(true);
+            if (applied >= 0) {
+                lastBypassNode = applied;
+                if (applied != liveNode) {
+                    triggerBatteryUpdate(true);
+                }
             }
         }
 
@@ -541,11 +564,39 @@ int toExternalChargeTechnology(int internalTech) {
 
 // Re-derives the bypass node from the live requests.  Returns the value it
 // decided on so callers can tell whether anything actually changed.
+// The MMI factory-mode charging disable.  It is a request on the bypass node,
+// not a latch: recording it and re-deriving the node keeps the monitor able to
+// clear it again, which a direct write could never do.
+::ndk::ScopedAStatus Charger::setPsyMmiChgEn(const std::string& value0, int* _out) {
+    state().mmiChargingDisabled = (value0 == "0") ? 1 : 0;
+    if (value0 == "0" || value0 == "1") {
+        applyBypassPolicy(true);
+    }
+    int rc;
+    std::string val = value0;
+    if (!writeStringPath("/sys/class/power_supply/battery/mmi_charging_enable", val)) {
+        // X6739 has no mmi_charging_enable; battery/disable is the inverse
+        rc = writeStringPath("/sys/class/power_supply/battery/disable",
+                              (value0 == "0" || value0 == "false") ? "1" : "0")
+                     ? 1
+                     : -1;
+    } else {
+        rc = 0;
+    }
+    *_out = (rc < 0) ? 0 : rc;
+    return ::ndk::ScopedAStatus::ok();
+}
+
 int applyBypassPolicy(bool force) {
     bypass::Inputs& in = state().bypass;
     in.capacity = readIntPath("/sys/class/power_supply/battery/capacity");
     int value = 0;
     bool anyRequest = bypass::decide(in, &value);
+    // The MMI factory-mode disable is a request on the same node.
+    if (state().mmiChargingDisabled) {
+        anyRequest = true;
+        value = 1;
+    }
     // No request at all: the caller keeps the node as it is, so a feature
     // that has never been asked for must not disturb the node.
     if (!anyRequest && !force) {
@@ -554,13 +605,10 @@ int applyBypassPolicy(bool force) {
     std::string node = std::to_string(value);
     writeStringPath("/sys/devices/platform/charger/bypass_charger", node);
     writeStringPath("/sys/devices/platform/charger/tran_aichg_disable_charger", node);
-    // init re-applies the prop to the node on every boot
-    // (tran_optimize.rc), so the prop has to follow the node or the setting
-    // is lost across a reboot.  Only write on a change: writing the prop
-    // fires the init trigger, which writes the node back.
-    if ((isBypassPropEnabled() ? 1 : 0) != value) {
-        setBypassProp(value);
-    }
+    // The prop is the user's standing intent and only the user's toggle sets
+    // it: a transient decision (charge limit reached, GameSpace asked) must
+    // not persist, or init re-applies it at the next boot and the bypass
+    // engages at any capacity with the in-memory target lost.
     return value;
 }
 

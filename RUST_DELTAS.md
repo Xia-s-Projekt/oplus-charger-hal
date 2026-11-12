@@ -189,3 +189,44 @@ This is the only intentional behaviour change in the port: everything else is
 the shipped logic on different node paths. The classification thresholds are
 untouched (33 W / 45 W), so a clamped reading can never have been a fast charge
 anyway.
+
+## 13. Bypass charging: the prop no longer latches transient decisions
+
+An audit of the bypass path found three flaws that together explain a bypass
+that engages on its own and then will not clear:
+
+1. `applyBypassPolicy` wrote `persist.sys.rianixia.bypass_charge.state` to
+   follow every decision. A transient engagement (the charge limit was
+   reached, GameSpace asked) persisted the prop, `tran_optimize.rc` re-applied
+   it at the next boot, and the monitor then latched `gameSwitch = 1` with
+   `upLimitPercent = 0` (in-memory only, lost on reboot) — so `featureEngaged`
+   returned true at *any* capacity and the phone stopped charging right after
+   boot.
+2. The monitor re-derived the node only when the prop *changed*. When the node
+   was left at 1 with the prop at 0 (an external writer, or the charge limit
+   crossed back below its target), nothing ever cleared it, and
+   `bypassChargeStatus()` reads the node, so the framework reported bypass on
+   with the toggle showing off. This was also a regression: d085d15's monitor
+   had an `else if (bypassProp == 1)` node guard that the `applyBypassPolicy`
+   refactor dropped.
+3. `setPsyMmiChgEn` wrote the node directly without recording a request, so
+   the monitor could never reconcile it.
+
+The fix:
+
+- `applyBypassPolicy` no longer writes the prop. The prop is the user's
+  standing intent and only the user's toggle sets it; the rc trigger applies
+  it at boot. Transient decisions live on the node and are re-derived.
+- The monitor reconciles every iteration: when the live node disagrees with
+  the last decision it re-runs the policy with `force`, so a node left at 1
+  with nothing requesting it clears within one poll interval, and a charge
+  limit releases when the battery drops below its target without waiting for
+  the framework to re-send `setChgConfig`.
+- `setPsyMmiChgEn` records `mmiChargingDisabled` in the charger state and
+  routes through `applyBypassPolicy(true)` instead of writing the node, so
+  the factory-mode disable is a request the monitor owns and can clear.
+
+The MMI request is deliberately kept out of `bypass::Inputs`: the policy
+struct stays the Oplus-feature-only unit-testable surface, and the C++ and
+Rust `applyBypassPolicy` fold it into the decision (`value = 1,
+anyRequest = true`) after `decide()`.

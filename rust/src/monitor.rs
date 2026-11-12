@@ -89,6 +89,7 @@ pub fn run_monitor_loop(charger: &Charger, stop: &std::sync::atomic::AtomicBool)
     let mut online_since = std::time::Instant::now();
     let mut last_pulse = std::time::Instant::now();
     let mut last_bypass_prop: i32 = -1;
+    let mut last_bypass_node: i32 = -1;
 
     let adapter_capacity_path = std::env::var("OPLUS_CHARGER_CAPACITY_NODE")
         .ok()
@@ -177,7 +178,25 @@ pub fn run_monitor_loop(charger: &Charger, stop: &std::sync::atomic::AtomicBool)
             }
             let applied = charger.apply_bypass_policy(true);
             if applied >= 0 {
+                last_bypass_node = applied;
                 charger.trigger_battery_update(true);
+            }
+        }
+
+        // Reconcile: the node can be left at 1 with nothing requesting it -
+        // an external writer, a transient decision from before the prop
+        // writeback was removed, or the charge limit that has since been
+        // crossed back below its target.  Re-derive it whenever the live
+        // node disagrees with the last decision, so the bypass can never
+        // stick on by itself.
+        let live_node = nodes::read_int_path("/sys/devices/platform/charger/bypass_charger");
+        if !nodes::is_error(live_node) && live_node != last_bypass_node {
+            let applied = charger.apply_bypass_policy(true);
+            if applied >= 0 {
+                last_bypass_node = applied;
+                if applied != live_node {
+                    charger.trigger_battery_update(true);
+                }
             }
         }
 
