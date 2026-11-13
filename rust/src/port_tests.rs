@@ -2,7 +2,6 @@
 // standalone/tests/bypass_policy_test.cpp one for one, plus the C `atoi`
 // semantics and the node sentinels.
 #[cfg(test)]
-
 use crate::bypass::{self, BypassInputs};
 use crate::constants;
 use crate::nodes::c_atoi;

@@ -153,7 +153,7 @@ verified, `[ ]` not done.
       `txn_getBccCsvData` + four `queryChargeInfo` fields still used the
       pre-remap node paths (RUST_DELTAS.md section 13).
 - [x] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — staged, md5
-      `776ec54b111266ea7ad822e8466b3c45` (407,384 bytes; the build that passed
+      `c3cb79d40977ff4d1d6f18d28a6c957c` (407,384 bytes; the build that passed
       the on-device A/B). The pre-remap C++ build it replaced is kept at
       `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V6-service.preremap.bak`
 - [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and
@@ -204,3 +204,60 @@ listed from the stock `.so` in order, each one disassembled with
 The one accepted difference class is the X6739 Transsion node patch: the stock
 reads Qualcomm paths, the port reads `/sys/devices/platform/charger/*` where
 that is what the X6739 kernel exposes.
+
+## 18. The rust-skills audit (2026-11-13) and its on-device measurements
+
+Audit pass with the `rust-skills` rule set.  All changes are comments,
+lint annotations, or provably-identical refactors; no behaviour changed.
+
+- `cargo test --lib` and `cargo clippy --lib --all-targets --bins` both
+  report **zero warnings** (down from 232 compiler warnings and 6 clippy
+  warnings).  The suppressed lints are deliberate:
+  - `non_snake_case` on `charger/mod.rs`, `accessors.rs`, `bridge.rs` — the
+    method names are the AIDL/C++ spellings the generators emit, so renaming
+    would be lost on the next `gen_txn.py` / `gen_accessors.py` run.
+  - `non_camel_case_types` on the two hand-rolled `mod libc` blocks in
+    `monitor.rs` / `detection.rs` — the type names are the libc spellings.
+  - `clippy::result_unit_err` on `binder.rs` — the generated dispatcher only
+    discriminates Ok/Err, and a richer error type would change a signature
+    the generator emits.
+- Every `unsafe` block in the crate now carries a `// SAFETY:` comment
+  (`unsafe-safety-comment`).  The three binder callbacks (`on_transact`,
+  `on_create`, `on_destroy`) were demoted from `unsafe extern "C" fn` to plain
+  `extern "C" fn` with the unsafety isolated at the parcel borrows
+  (`unsafe-minimize-scope`); the service registers them the same way.
+- Four `unwrap()`s went away: `libc_open` was an `unsafe fn` that panicked on
+  an unopenable path and is now a safe wrapper returning `-1`, and the static
+  `CString` arguments of the double-forked `service call` became `expect()`
+  with the invariant written out.
+- The dead items the compiler flagged (`Charger.detection`,
+  `FastChargeDetector.fast_chg_indicator`, `bypass_node_value`) were checked
+  against the C++ first: `mDetection`, `mFastChgIndicator` and the static
+  `bypassNodeValue` have **no callers upstream either**, so they are faithful
+  transcription, not a port gap.  They carry `#[allow(dead_code)]` with that
+  note rather than being deleted.
+- One dead check removed: `read_int_once`'s `if n < 0` compared a `usize`
+  against zero — `read()` returns `Result<usize>` in Rust, unlike `ssize_t`,
+  so the branch was unreachable.
+
+On-device measurements (abtest instance + the live `/vendor` service):
+
+- Rebuilt binary: md5 `c3cb79d40977ff4d1d6f18d28a6c957c`, re-staged to
+  `erofs/vendor/bin/hw/`.  `getPsyUsbStatus OK 0`, `getPsyUsbOnline OK 1`,
+  probe_full 132/132 OK with **zero FAIL**, and the A/B diff against the C++
+  build shows only live readings (`getBattSubCurrent`,
+  `getBatteryVoltageNow`, `getPsyBatteryCurrentNow`).
+- Both abtest logs (`/data/local/tmp/abtest_{rust,cpp}.log`) are empty: the
+  service emits nothing on startup, while probing, or on shutdown.
+- An 8-second logcat sample held **zero** lines from the live HAL process and
+  zero crashes/fatals/signal entries.
+- Monitor CPU: `0.22 s` of system CPU in 20 s at the 100 ms slow-poll rate
+  (~1.1 %), and ~4 % during the 15 s fast-poll window after a plug-in — the
+  C++ build measures the same ~4 % in the same window, so the cost is
+  inherited from the shipped loop design, not introduced by the port.
+- One pre-existing issue that is *not* ours but drives our loop:
+  `android.hardware.usb@1.2-service-mediatekv2` logged 5,508
+  `uevent_event change@/devices/platform/charger` lines in an 8-second
+  window while the mt6360 charger stabilised.  Our netlink socket drains
+  them the way the C++ does, so each queued uevent turns into one
+  monit-loop iteration during that window.

@@ -5,6 +5,10 @@
 // loop runs on its own thread, and the FastChargeDetector is shared between
 // them.  Every field that both touch is behind a Mutex, exactly as the C++
 // FastChargeDetector is.
+//
+// The txn_* names are the AIDL method names, kept verbatim so the dispatcher
+// reads next to the C++ onTransact switch it mirrors.
+#![allow(non_snake_case)]
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -23,6 +27,7 @@ use crate::txn::TestKitResult;
 use crate::testkit::KernelTest;
 
 /// The shared HAL state, mirroring struct ChargerState in ChargerManual.cpp.
+#[derive(Default)]
 pub struct ChargerState {
     pub custom_select_chg_mode: i32,
     pub smart_chg_mode: i32,
@@ -47,30 +52,6 @@ pub struct ChargerState {
     pub mmi_charging_disabled: i32,
 }
 
-impl Default for ChargerState {
-    fn default() -> Self {
-        Self {
-            custom_select_chg_mode: 0,
-            smart_chg_mode: 0,
-            bcc_exp_status: 0,
-            bms_heating_status: 0,
-            bms_heating_running_status: 0,
-            chg_exchange_mesg_init: 0,
-            chg_exchange_soh_mesg_init: 0,
-            ui_soh_value: 0,
-            screen_status: 0,
-            battery_log_push: 0,
-            chg_rus_config: 0,
-            wireless_pen_soc: 0,
-            wls_third_partition_info: 0,
-            uisoh_debug_info: String::new(),
-            chg_config: HashMap::new(),
-            usb_eye_diagram: HashMap::new(),
-            bypass: BypassInputs::default(),
-            mmi_charging_disabled: 0,
-        }
-    }
-}
 
 /// sOtgSwitchState in Charger.cpp: the last value written through
 /// setPsyOtgSwitch, used when the node cannot be read back.
@@ -79,9 +60,19 @@ static OTG_SWITCH_STATE: AtomicI32 = AtomicI32::new(0);
 pub struct Charger {
     pub(crate) state: Mutex<ChargerState>,
     fast_charge: Mutex<FastChargeDetector>,
+    // Mirrors mDetection in Charger.h, which the shipped code constructs and
+    // resets but never queries; the Rust monitor drives the netlink socket
+    // directly in monitor.rs, so this stays unused.
+    #[allow(dead_code)]
     detection: Mutex<ChgDetectionCheck>,
     decimal: Mutex<DecimalState>,
     running: std::sync::atomic::AtomicBool,
+}
+
+impl Default for Charger {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Charger {
@@ -244,6 +235,9 @@ impl Charger {
 
     /// The MTK charger driver only accepts a bare 0 or 1 on the bypass node,
     /// but the Oplus callers pass "1+switch=1".  Take the leading integer.
+    // Mirrors the static bypassNodeValue in ChargerManual.cpp, which also has
+    // no callers upstream; kept so the transcription diff stays 1:1.
+    #[allow(dead_code)]
     fn bypass_node_value(value: &str) -> String {
         let end = value
             .bytes()
@@ -993,5 +987,4 @@ pub(crate) fn c_atoi(buf: &[u8]) -> i32 {
     v.clamp(i32::MIN as i64, i32::MAX as i64) as i32
 }
 
-// Re-export so the generated accessors and the dispatcher can find the impl.
-pub(crate) use accessors::*;
+

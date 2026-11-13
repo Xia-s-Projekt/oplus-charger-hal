@@ -3,6 +3,10 @@
 // ChargerTxn forwarding stubs for the accessors emitted by
 // gen_accessors.py.  The hand-written methods implement the trait
 // themselves in charger/mod.rs.
+//
+// Names mirror the C++ accessors, which gen_txn.py copies verbatim.
+#![allow(non_snake_case)]
+
 
 use crate::charger::Charger;
 

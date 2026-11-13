@@ -23,6 +23,10 @@ impl ChgDetectionCheck {
     /// Open the netlink uevent socket with the shipped buffer sizing.
     /// Returns the fd, or -1.
     pub fn open_uevent_socket(&mut self, buffer_size: i32, pass_credentials: bool) -> i32 {
+        // SAFETY: every pointer argument is a stack local of this frame whose
+        // C type matches (i32 for the socket options, sockaddr_nl for bind)
+        // and each length is sizeof of the same type, so no aliasing or
+        // lifetime obligation crosses the call boundary.
         unsafe {
             let fd = libc::socket(
                 libc::AF_NETLINK,
@@ -115,6 +119,8 @@ impl Default for ChgDetectionCheck {
 
 impl Drop for ChgDetectionCheck {
     fn drop(&mut self) {
+        // SAFETY: both fds were produced by socket()/epoll_create() inside
+        // this struct and Drop runs once, so each is closed exactly once.
         unsafe {
             if self.uevent_fd >= 0 {
                 libc::close(self.uevent_fd);
@@ -131,6 +137,9 @@ impl Drop for ChgDetectionCheck {
 /// The netlink constants the C++ uses, kept here so the module has no
 /// dependency on a libc crate for them.
 pub mod libc {
+    // The type names are the libc spellings, kept verbatim on purpose.
+    #![allow(non_camel_case_types)]
+
     pub type c_int = i32;
     pub type c_void = core::ffi::c_void;
     pub type socklen_t = u32;

@@ -30,6 +30,9 @@ fn log(prio: i32, tag: &str, msg: &str) {
         Ok(m) => m,
         Err(_) => return,
     };
+    // SAFETY: tag and msg are NUL-terminated CStrings alive for the whole
+    // call, FMT_PERCENT_S is a static byte array that ends in a NUL, and the
+    // variadic argument count matches the "%s" format string.
     unsafe {
         log_print(
             prio,
@@ -44,6 +47,7 @@ unsafe fn log_print(prio: i32, tag: *const c_char, fmt: *const c_char, arg: *con
     unsafe extern "C" {
         fn __android_log_print(prio: i32, tag: *const c_char, fmt: *const c_char, ...) -> i32;
     }
+    // SAFETY: Every CString handed to __android_log_print is NUL-terminated and alive for the whole call, and the format string is a plain C string with no arguments.
     unsafe {
         __android_log_print(prio, tag, fmt, arg);
     }

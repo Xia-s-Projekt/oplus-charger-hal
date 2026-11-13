@@ -43,9 +43,8 @@ fn read_int_once(path: &str) -> Result<i32, i32> {
         Ok(n) => n,
         Err(_) => return Err(K_IO_ERROR),
     };
-    if n < 0 {
-        return Err(K_IO_ERROR);
-    }
+    // read() returns usize in Rust, unlike ssize_t in the C the shipped code
+    // mirrors, so a negative length is not a separate failure mode here.
     Ok(c_atoi(&buf[..n]))
 }
 

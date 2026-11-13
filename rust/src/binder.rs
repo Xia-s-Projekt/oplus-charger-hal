@@ -4,6 +4,11 @@
 // codegen crate is involved: the transaction wire format is reproduced by
 // txn.rs, which is what the generated C++ ICharger.cpp does too.
 
+// The read helpers report a unit error: the generated dispatcher (txn.rs) only
+// discriminates Ok/Err, and a richer error type would change a signature the
+// generator emits.
+#![allow(clippy::result_unit_err)]
+
 use std::os::raw::{c_char, c_int, c_uint, c_void};
 
 pub type BinderStatus = c_int;
@@ -64,6 +69,9 @@ pub struct AIBinder_Class {
     _private: [u8; 0],
 }
 
+// SAFETY: opaque NDK declarations.  Sound because every call site in this
+// crate passes pointers that are alive and NUL-terminated for the whole call,
+// as documented at each unsafe block that uses them.
 unsafe extern "C" {
     pub fn AIBinder_Class_define(
         interface_descriptor: *const c_char,
@@ -140,6 +148,7 @@ impl BinderHandle {
 
 impl Drop for BinderHandle {
     fn drop(&mut self) {
+        // SAFETY: self.ptr is a strong reference obtained from from_raw and Drop runs exactly once on it.
         unsafe { AIBinder_decStrong(self.ptr) }
     }
 }
@@ -178,6 +187,7 @@ impl Parcel {
     }
 
     pub fn write_i32(&mut self, v: i32) -> bool {
+        // SAFETY: self.ptr is a valid AParcel obtained from AParcel_create or borrowed from the driver, and the write is sequenced before the driver consumes the parcel.
         unsafe { AParcel_writeInt32(self.ptr, v) == STATUS_OK }
     }
 
@@ -192,6 +202,7 @@ impl Parcel {
     }
 
     pub fn write_bool(&mut self, v: bool) -> bool {
+        // SAFETY: self.ptr is a valid AParcel obtained from AParcel_create or borrowed from the driver, and the write is sequenced before the driver consumes the parcel.
         unsafe { AParcel_writeBool(self.ptr, v) == STATUS_OK }
     }
 
@@ -210,6 +221,7 @@ impl Parcel {
             Ok(c) => c,
             Err(_) => return false,
         };
+        // SAFETY: self.ptr is a valid AParcel and c is a NUL-terminated CString alive for the duration of the call; its length excludes the NUL as the NDK requires.
         unsafe { AParcel_writeString(self.ptr, c.as_ptr(), s.len() as i32) == STATUS_OK }
     }
 
@@ -235,6 +247,7 @@ impl Parcel {
     }
 
     pub fn write_status_ok(&mut self) -> bool {
+        // SAFETY: self.ptr is a valid AParcel and both status pointers are freshly allocated here and deleted in the same block, so neither leaks nor aliases.
         unsafe {
             let status = AStatus_newOk();
             let rc = AParcel_writeStatusHeader(self.ptr, status);
@@ -244,6 +257,7 @@ impl Parcel {
     }
 
     pub fn write_status(&mut self, status: BinderStatus) -> bool {
+        // SAFETY: self.ptr is a valid AParcel and both status pointers are freshly allocated here and deleted in the same block, so neither leaks nor aliases.
         unsafe {
             let s = AStatus_fromStatus(status);
             let rc = AParcel_writeStatusHeader(self.ptr, s);
@@ -253,10 +267,12 @@ impl Parcel {
     }
 
     pub fn data_position(&self) -> i32 {
+        // SAFETY: self.ptr is a valid AParcel obtained from AParcel_create or borrowed from the driver.
         unsafe { AParcel_getDataPosition(self.ptr) }
     }
 
     pub fn set_data_position(&mut self, pos: i32) -> bool {
+        // SAFETY: self.ptr is a valid AParcel and pos came from a previous data_position() of the same parcel, so the offset is in range.
         unsafe { AParcel_setDataPosition(self.ptr, pos) == STATUS_OK }
     }
 }
@@ -264,6 +280,7 @@ impl Parcel {
 impl Drop for Parcel {
     fn drop(&mut self) {
         if self.owned {
+            // SAFETY: self.ptr is a valid AParcel and the Vec<u8> outlives the call because alloc_vec only touches it through the caller-supplied handle.
             unsafe { AParcel_delete(self.ptr) }
         }
     }

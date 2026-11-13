@@ -1044,7 +1044,7 @@ pub fn dispatch(c: &Charger, code: u32, in_p: &Parcel, out_p: &mut Parcel) -> i3
                 Ok(v) => v,
                 Err(_) => return STATUS_UNKNOWN_TRANSACTION,
             };
-            let mut parcelable = c.txn_testKitFeatureTest(a0);
+            let parcelable = c.txn_testKitFeatureTest(a0);
             if !out_p.write_status_ok() {
                 return STATUS_UNKNOWN_TRANSACTION;
             }

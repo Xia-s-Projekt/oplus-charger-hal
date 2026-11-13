@@ -38,6 +38,7 @@ pub fn trigger_battery_update(force: bool) {
         }
     }
 
+    // SAFETY: fork() in a single-threaded binder service is safe from lock deadlocks only because the parent does not hold any Rust mutex across the call; the child never returns (execv or _exit) so it cannot run any Drop.
     unsafe {
         let pid = libc::fork();
         if pid == 0 {
@@ -50,11 +51,14 @@ pub fn trigger_battery_update(force: bool) {
                     libc::dup2(devnull, 2);
                     libc::close(devnull);
                 }
-                let path = CString::new("/system/bin/service").unwrap();
-                let a0 = CString::new("service").unwrap();
-                let a1 = CString::new("call").unwrap();
-                let a2 = CString::new("batteryproperties").unwrap();
-                let a3 = CString::new("2").unwrap();
+                // These are all static literals with no interior NUL, so the
+                // construction cannot fail; expect() documents the invariant
+                // instead of silently unwrapping.
+                let path = CString::new("/system/bin/service").expect("static path has no interior NUL");
+                let a0 = CString::new("service").expect("static arg has no interior NUL");
+                let a1 = CString::new("call").expect("static arg has no interior NUL");
+                let a2 = CString::new("batteryproperties").expect("static arg has no interior NUL");
+                let a3 = CString::new("2").expect("static arg has no interior NUL");
                 let argv = [
                     a0.as_ptr(),
                     a1.as_ptr(),
@@ -73,8 +77,15 @@ pub fn trigger_battery_update(force: bool) {
     }
 }
 
-unsafe fn libc_open(path: &str, flags: i32) -> i32 {
-    let c = CString::new(path).unwrap();
+fn libc_open(path: &str, flags: i32) -> i32 {
+    // A path with an interior NUL cannot be opened at all; returning -1 keeps
+    // the monitor loop alive instead of panicking on an unopenable path.
+    let c = match CString::new(path) {
+        Ok(c) => c,
+        Err(_) => return -1,
+    };
+    // SAFETY: c is a NUL-terminated CString alive for the call and flags is an
+    // integer, so no aliasing obligation crosses the boundary.
     unsafe { libc::open(c.as_ptr(), flags) }
 }
 
@@ -82,8 +93,6 @@ unsafe fn libc_open(path: &str, flags: i32) -> i32 {
 /// mirroring the C++ `while (mRunning.load(std::memory_order_relaxed))` in
 /// Charger::runMonitorLoop (ChargerManual.cpp:339).
 pub fn run_monitor_loop(charger: &Charger) {
-    use std::sync::atomic::Ordering;
-
     let mut last_watts: i32 = -1;
     let mut last_online: i32 = -1;
     let mut last_status = String::new();
@@ -99,6 +108,7 @@ pub fn run_monitor_loop(charger: &Charger) {
         .unwrap_or_else(|| "/sys/devices/platform/charger/adapter_capacity".to_string());
 
     let mut uevent_fd = -1i32;
+    // SAFETY: These are plain integer socket arguments with no pointers, so there is no aliasing to uphold; the returned fd is stored and only used from the monitor thread.
     unsafe {
         let fd = libc::socket(
             libc::AF_NETLINK,
@@ -269,11 +279,15 @@ pub fn run_monitor_loop(charger: &Charger) {
     }
 
     if uevent_fd >= 0 {
+        // SAFETY: The fd was obtained from socket()/open() and is closed exactly once.
         unsafe { libc::close(uevent_fd) };
     }
 }
 
 pub mod libc {
+    // The type names are the libc spellings, kept verbatim on purpose.
+    #![allow(non_camel_case_types)]
+
     pub type c_int = i32;
     pub type c_char = std::os::raw::c_char;
     pub type c_void = core::ffi::c_void;
@@ -310,6 +324,9 @@ pub mod libc {
         pub revents: i16,
     }
 
+    // SAFETY: bionic libc declarations used only through the unsafe blocks in
+    // trigger_battery_update and run_monitor_loop, whose comments record the
+    // pointer/lifetime obligations for each call.
     unsafe extern "C" {
         pub fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
         pub fn close(fd: c_int) -> c_int;

@@ -11,8 +11,6 @@
 // AServiceManager_addService() with the BnCharger binder.
 
 use std::ffi::CString;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use std::sync::OnceLock;
 
 use oplus_charger::binder;
@@ -24,35 +22,39 @@ use oplus_charger::txn;
 static CHARGER: OnceLock<&'static Charger> = OnceLock::new();
 
 fn charger() -> &'static Charger {
-    *CHARGER
+    CHARGER
         .get()
         .expect("charger instance created before the binder is registered")
 }
 
-unsafe extern "C" fn on_transact(
+/// Binder transaction callback.  Registered through AIBinder_Class_define, so
+/// the NDK calls this with a valid binder pointer and driver-owned parcels.
+extern "C" fn on_transact(
     _binder: *mut binder::AIBinder,
     code: u32,
     in_parcel: *const binder::AParcel,
     reply: *mut binder::AParcel,
 ) -> binder::BinderStatus {
-    // Both parcels are owned by the binder driver for the duration of the
-    // call, so neither wrapper frees them on drop.
+    // SAFETY: the driver keeps both parcels alive for the whole call, which is
+    // the lifetime Parcel::borrow requires; the wrappers are dropped without
+    // freeing because the driver owns them.
     let inp = unsafe { binder::Parcel::borrow(in_parcel) };
     let mut out = unsafe { binder::Parcel::borrow(reply) };
     let c = charger();
     txn::dispatch(c, code, &inp, &mut out)
 }
 
-unsafe extern "C" fn on_create(_args: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
-    // The binder class needs a context pointer; the service itself is
-    // reachable through the static, so the context is unused.
+/// The binder class needs a context pointer; the service itself is reachable
+/// through the static, so the context is unused.  No unsafe operation here,
+/// the ABI just wants a plain function pointer.
+extern "C" fn on_create(_args: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
     std::ptr::null_mut()
 }
 
 // The platform's AIBinder_Class_define rejects a null onDestroy (its
 // disassembly returns null for every null argument), so the class must
 // carry one even though the service owns nothing in the context.
-unsafe extern "C" fn on_destroy(_context: *mut std::ffi::c_void) {}
+extern "C" fn on_destroy(_context: *mut std::ffi::c_void) {}
 
 /// The instance suffix can be overridden so a test build can register next
 /// to the HAL that is already running on the device.  Unset - the shipped
@@ -73,6 +75,8 @@ fn register_charger_service() -> i32 {
         Ok(d) => d,
         Err(_) => return -1,
     };
+    // SAFETY: descriptor is a NUL-terminated CString alive for the call, and
+    // the three callbacks are plain extern "C" fns with matching signatures.
     let class = unsafe {
         binder::AIBinder_Class_define(
             descriptor.as_ptr(),
@@ -86,6 +90,8 @@ fn register_charger_service() -> i32 {
         return -1;
     }
 
+    // SAFETY: class was just created and the call is single-threaded, so no
+    // other thread can race the construction; the context is unused.
     let binder_obj = unsafe { binder::AIBinder_new(class, std::ptr::null_mut()) };
     if binder_obj.is_null() {
         log::error("AIBinder_new failed");
@@ -97,6 +103,8 @@ fn register_charger_service() -> i32 {
         Ok(n) => n,
         Err(_) => return -1,
     };
+    // SAFETY: binder_obj is owned by this thread until the call registers it,
+    // and cname is a NUL-terminated CString alive for the call.
     let status = unsafe { binder::AServiceManager_addService(binder_obj, cname.as_ptr()) };
     if status != binder::STATUS_OK {
         log::error(&format!("addService({name}) failed: {status}"));
@@ -114,6 +122,7 @@ fn register_charger_service() -> i32 {
 }
 
 fn main() {
+    // SAFETY: Called once before the binder thread pool starts and takes only an integer count.
     unsafe { binder::ABinderProcess_setThreadPoolMaxThreadCount(0) };
 
     let status = register_charger_service();
@@ -123,5 +132,6 @@ fn main() {
     }
 
     log::info("oplus charger service start");
+    // SAFETY: Called from the main thread after the service is registered; it only returns on process shutdown.
     unsafe { binder::ABinderProcess_joinThreadPool() };
 }

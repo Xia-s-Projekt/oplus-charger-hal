@@ -30,13 +30,11 @@ impl KernelTest {
     pub fn feature_num(&self) -> Option<u32> {
         let fd = self.fd()?;
         let mut num: u32 = 0;
-        let rc = unsafe {
-            ioctl(
-                fd,
-                constants::IOCTL_GET_FEATURE_NUM,
-                &mut num as *mut u32 as *mut core::ffi::c_void,
-            )
-        };
+        let rc = ioctl(
+            fd,
+            constants::IOCTL_GET_FEATURE_NUM,
+            &mut num as *mut u32 as *mut core::ffi::c_void,
+        );
         if rc < 0 {
             return None;
         }
@@ -46,13 +44,11 @@ impl KernelTest {
     pub fn feature_list(&self) -> Option<String> {
         let fd = self.fd()?;
         let mut buf = [0u8; 512];
-        let rc = unsafe {
-            ioctl(
-                fd,
-                constants::IOCTL_GET_FEATURE_LIST,
-                buf.as_mut_ptr() as *mut core::ffi::c_void,
-            )
-        };
+        let rc = ioctl(
+            fd,
+            constants::IOCTL_GET_FEATURE_LIST,
+            buf.as_mut_ptr() as *mut core::ffi::c_void,
+        );
         if rc < 0 {
             return None;
         }
@@ -64,13 +60,11 @@ impl KernelTest {
     pub fn name(&self, index: u32) -> Option<String> {
         let fd = self.fd()?;
         let mut idx = index;
-        let rc = unsafe {
-            ioctl(
-                fd,
-                constants::IOCTL_GET_NAME,
-                &mut idx as *mut u32 as *mut core::ffi::c_void,
-            )
-        };
+        let rc = ioctl(
+            fd,
+            constants::IOCTL_GET_NAME,
+            &mut idx as *mut u32 as *mut core::ffi::c_void,
+        );
         if rc < 0 {
             return None;
         }
@@ -93,15 +87,15 @@ impl KernelTest {
             index: u32,
             text: [u8; 504],
         }
+        // SAFETY: Payload is a plain repr(C) struct of a u32 and a u8 array,
+        // which have no validity invariants, so all-zero is a valid instance.
         let mut payload: Payload = unsafe { std::mem::zeroed() };
         payload.index = index;
-        let rc = unsafe {
-            ioctl(
-                fd,
-                constants::IOCTL_RUN_TEST,
-                &mut payload as *mut Payload as *mut core::ffi::c_void,
-            )
-        };
+        let rc = ioctl(
+            fd,
+            constants::IOCTL_RUN_TEST,
+            &mut payload as *mut Payload as *mut core::ffi::c_void,
+        );
         if rc < 0 {
             return (errno(), None);
         }
@@ -119,10 +113,14 @@ impl Default for KernelTest {
     }
 }
 
-unsafe fn ioctl(fd: i32, request: u32, arg: *mut core::ffi::c_void) -> i32 {
+/// Issues a kernelTest ioctl.  Safe to call: the raw contract lives inside.
+fn ioctl(fd: i32, request: u32, arg: *mut core::ffi::c_void) -> i32 {
     unsafe extern "C" {
         fn ioctl(fd: i32, request: u64, arg: *mut core::ffi::c_void) -> i32;
     }
+    // SAFETY: fd comes from KernelTest::open and is only used from this
+    // struct, request encodes a fixed kernelTest id, and every caller passes
+    // a &mut local of the type the kernel fills in.
     unsafe { ioctl(fd, request as u64, arg) }
 }
 
@@ -130,5 +128,6 @@ fn errno() -> i32 {
     unsafe extern "C" {
         fn __errno() -> *mut i32;
     }
+    // SAFETY: *__errno() points at thread-local storage initialised by libc and is valid for the whole read.
     unsafe { *__errno() }
 }

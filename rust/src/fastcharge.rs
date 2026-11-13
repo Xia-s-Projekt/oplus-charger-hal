@@ -47,6 +47,8 @@ pub struct FastChargeDetector {
     power_supply_fast_charge: String,
     pump_express: String,
     adapter_capacity: String,
+    // mFastChgIndicator in the shipped C++: assigned in the ctor, never read.
+    #[allow(dead_code)]
     fast_chg_indicator: String,
     state: FastChargeState,
 }
@@ -78,6 +80,12 @@ fn read_string_node(path: &str) -> Option<String> {
         s.pop();
     }
     Some(s)
+}
+
+impl Default for FastChargeDetector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FastChargeDetector {
