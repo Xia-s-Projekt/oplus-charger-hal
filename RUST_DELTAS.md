@@ -269,3 +269,17 @@ returned `-ENODEV` when the device is missing, but the C++ caller
 which is `-1` (the `::open()` failure value, not `-errno` despite the class
 comment). The probe showed the C++ HAL answering `ret=-1`; the Rust port now
 matches.
+
+## 14. The monitor loop never ran (fixed, not a delta)
+
+`run_monitor_loop` took a `stop: &AtomicBool` that main.rs constructed as
+`AtomicBool::new(false)` and looped `while stop.load(...)`, so the loop body
+executed zero times: no bypass reconciliation, no fast-charge refresh, no
+battery-update pulses. The C++ it ports (`Charger::runMonitorLoop`,
+ChargerManual.cpp:339) loops `while (mRunning.load(std::memory_order_relaxed))`
+with mRunning set true by `Charger::start()`. The Rust port already had the
+equivalent `Charger::running` flag and called `set_running(true)` before
+registration; the loop now reads `charger.running()` and the redundant `stop`
+parameter is gone. Verified on device: a `bypass_charger` node latched at 1
+with the prop at 0 clears within one poll interval, and toggling
+`persist.sys.rianixia.bypass_charge.state` 0->1->0 drives the node 0->1->0.

@@ -107,10 +107,8 @@ fn register_charger_service() -> i32 {
     log::info("registerChargerService0");
 
     // The monitor loop is the last thing service.cpp starts.
-    let stop = Arc::new(AtomicBool::new(false));
-    let stop2 = Arc::clone(&stop);
     std::thread::spawn(move || {
-        oplus_charger::monitor::run_monitor_loop(c, &stop2);
+        oplus_charger::monitor::run_monitor_loop(c);
     });
     0
 }

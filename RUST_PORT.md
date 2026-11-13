@@ -153,7 +153,7 @@ verified, `[ ]` not done.
       `txn_getBccCsvData` + four `queryChargeInfo` fields still used the
       pre-remap node paths (RUST_DELTAS.md section 13).
 - [x] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — staged, md5
-      `34c4210eb1db8c187f6961e64509e2b5` (407,704 bytes; the build that passed
+      `62c2b98012446234b45931c6390635df` (407,384 bytes; the build that passed
       the on-device A/B). The pre-remap C++ build it replaced is kept at
       `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V6-service.preremap.bak`
 - [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and

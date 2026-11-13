@@ -78,8 +78,10 @@ unsafe fn libc_open(path: &str, flags: i32) -> i32 {
     unsafe { libc::open(c.as_ptr(), flags) }
 }
 
-/// The monitor loop body.  Runs until `stop` is set.
-pub fn run_monitor_loop(charger: &Charger, stop: &std::sync::atomic::AtomicBool) {
+/// The monitor loop body.  Runs until the charger's running flag clears,
+/// mirroring the C++ `while (mRunning.load(std::memory_order_relaxed))` in
+/// Charger::runMonitorLoop (ChargerManual.cpp:339).
+pub fn run_monitor_loop(charger: &Charger) {
     use std::sync::atomic::Ordering;
 
     let mut last_watts: i32 = -1;
@@ -121,7 +123,7 @@ pub fn run_monitor_loop(charger: &Charger, stop: &std::sync::atomic::AtomicBool)
         }
     }
 
-    while stop.load(Ordering::Relaxed) {
+    while charger.running() {
         let now = std::time::Instant::now();
         let online_elapsed = now.duration_since(online_since).as_millis();
         let poll_timeout_ms = if last_online == 1
