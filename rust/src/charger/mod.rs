@@ -913,14 +913,21 @@ impl Charger {
     }
 
     pub(crate) fn txn_getPsyUsbStatus(&self) -> i32 {
-        let mut val = nodes::read_node_int(
-            "/sys/class/power_supply/usb/usb_status",
-            Some("/sys/class/power_supply/charger/online"),
-        );
+        // usb_status is a bitmask of USB-port abnormality flags, NOT an online
+        // flag: bit 0 = "liquid or foreign object in the port", bit 1 =
+        // "humidity".  com.oplus.powermonitor's UsbStatusWarningService pops
+        // the "Alien object or liquid detected" warning whenever either bit is
+        // set, so returning charger/online (1) here false-alarms once per
+        // minute.  The X6739 stack has no such sensor:
+        // /sys/class/power_supply/usb does not exist and Transsion's
+        // tran_water_detect only exports a test-injection node, so the only
+        // safe fallback is 0.
+        let val = nodes::read_node_int_single("/sys/class/power_supply/usb/usb_status");
         if nodes::is_error(val) {
-            val = 0;
+            0
+        } else {
+            val
         }
-        val
     }
 
     // The MMI factory-mode disable is a request on the bypass node, not a

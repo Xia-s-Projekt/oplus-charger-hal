@@ -139,7 +139,7 @@ were read off the device before each mapping.
 | `/sys/class/power_supply/ac/online` | `/sys/class/power_supply/mtk-master-charger/online` | exists, `1` |
 | `/sys/class/power_supply/battery/short_c_hw_status` | `/sys/devices/platform/charger/cc_smt_status` | exists, `1` |
 | `/proc/charger/input_current_now` | `/sys/class/power_supply/charger/input_current_limit` | exists, `1200` |
-| `/sys/class/power_supply/usb/usb_status` | `/sys/class/power_supply/charger/online` | exists, `1` |
+| `/sys/class/power_supply/usb/usb_status` | *(no fallback — see section 15; the node is a port-abnormality bitmask, not an online flag)* | n/a |
 | `/sys/class/power_supply/usb/input_current_now` | `/sys/class/power_supply/charger/input_current_limit` | same node as above |
 | `/sys/class/power_supply/usb/primal_type` | `/sys/devices/platform/charger/chr_type` | exists, `5` (PD) |
 | `/sys/class/oplus_chg/battery/gsm_call_ongoing` | `/sys/devices/platform/odm/odm:tran_battery/tran_call_state` | exists, `0` |
@@ -283,3 +283,40 @@ registration; the loop now reads `charger.running()` and the redundant `stop`
 parameter is gone. Verified on device: a `bypass_charger` node latched at 1
 with the prop at 0 clears within one poll interval, and toggling
 `persist.sys.rianixia.bypass_charge.state` 0->1->0 drives the node 0->1->0.
+
+## 15. `getPsyUsbStatus`: the false "Alien object or liquid detected" warning
+
+The remap in section 11 mapped `/sys/class/power_supply/usb/usb_status` to
+`/sys/class/power_supply/charger/online`, and on this device the primary node
+does not exist at all (`/sys/class/power_supply/usb` is absent), so the HAL
+returned `1` whenever a charger was attached. That is wrong, and it showed up
+as a user-visible bug: the "Alien object or liquid detected. Plug out the
+charger..." popup once a minute.
+
+The evidence chain (all read off the device and the shipped APKs):
+
+- `OplusBatteryServiceFeature.getPsyUsbStatus()` calls `ICharger::getPsyUsbStatus()`
+  directly (oplus-services `classes.dex` 71cef8) and stores it in
+  `OplusBatteryService.mUsbStatus`, which is broadcast as
+  `oplus.intent.action.USB_HW_STATUS` extra `usb_hw_status_extra`.
+- `com.oplus.powermonitor` `UsbStatusWarningService` (system_ext
+  `PowerMonitor.apk`, 60 s `ACTION_PERIODIC_USB_CHECK` alarm) computes
+  `needAlert = (usbStatus & 1) != 0 || (usbStatus & 2) != 0`.
+- Its `N(III)` picks the message by bit: bit 1 (2) is the "Humidity is
+  detected on your USB port" dialog (`usb_dialog_title_clean` +
+  `liquid_detected_warning_unplug`), bit 0 (1) is the "Unplug Charger" dialog
+  with `usb_port_abnormal_warning_msg` — string #220, "Alien object or liquid
+  detected. Plug out the charger, make sure the charger and the USB port are
+  dry and clean, and restart the phone."
+
+`usb_status` is therefore a **bitmask of port abnormality flags, not an online
+or charger-type value**; `getPsyUsbOnline` is the separate method that reports
+USB presence and keeps its `charger/online` fallback. There is no sensor for
+this on the X6739: `/sys/class/power_supply/usb` does not exist and
+Transsion's `tran_water_detect` exports only a test-injection node
+(`tran_wd_cmd`, module parameter `g_fake_flooding_water`), no status readout.
+The fix in both languages reads the Oplus path only and falls back to `0`
+(clean); `getPsyUsbOnline`/`getPsyUsbStatus` now report 1/0 respectively on
+this device, verified with probe_full against both the C++ and the Rust
+build. Charging is unaffected: `mUsbStatus` has no consumer in
+`OplusBatteryService` beyond the broadcast and the dumpsys output.

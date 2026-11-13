@@ -368,7 +368,15 @@ int writeNode(const char* primary, const char* secondary,
 }
 
 ::ndk::ScopedAStatus Charger::getPsyUsbStatus(int* _out) {
-    int val = readNodeInt("/sys/class/power_supply/usb/usb_status", "/sys/class/power_supply/charger/online");
+    // usb_status is a bitmask of USB-port abnormality flags, NOT an online
+    // flag: bit 0 = "liquid or foreign object in the port", bit 1 = "humidity".
+    // com.oplus.powermonitor's UsbStatusWarningService pops the "Alien object
+    // or liquid detected" warning whenever either bit is set, so returning
+    // charger/online (1) here false-alarms once per minute.
+    // The X6739 stack has no such sensor: /sys/class/power_supply/usb does not
+    // exist and Transsion's tran_water_detect only exports a test-injection
+    // node, so the only safe fallback is 0.
+    int val = readNodeIntSingle("/sys/class/power_supply/usb/usb_status");
     if (val == kReadError || val == kIoError || val == kParseError) {
         val = 0;
     }
