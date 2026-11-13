@@ -218,7 +218,17 @@ impl Parcel {
         let holder = &mut out as *mut Vec<u8> as *mut c_void;
         let rc = unsafe { AParcel_readString(self.ptr, holder, Some(alloc_vec)) };
         if rc != STATUS_OK {
-            return Err(());
+            return Err(())
+        }
+        // alloc_vec sizes the buffer to the wire length, which includes the
+        // NUL terminator (binder_parcel.h: "length ... including the NUL
+        // terminator").  Drop that byte, or every AIDL string we read would
+        // carry an interior NUL and CString::new would reject it on the way
+        // back out.
+        if let Some(0) = out.last() {
+            if !out.is_empty() {
+                out.truncate(out.len() - 1);
+            }
         }
         // A null string comes back as an empty vec.
         String::from_utf8(out).map_err(|_| ())

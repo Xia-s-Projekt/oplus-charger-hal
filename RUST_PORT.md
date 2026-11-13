@@ -136,17 +136,33 @@ verified, `[ ]` not done.
 - [x] 7.4 strip the output — 406,624 bytes, no `.symtab`/`.debug` (checked in build.sh)
 - [x] 7.5 transaction-code parity — all 130 codes read from the stock
       `oos15_old` V6 `BpCharger` disassembly match `txn.rs`
-- [ ] 7.6 A/B comparison: run both HALs on device, diff every getter's answer
+- [x] 7.6 A/B comparison: run both HALs on device, diff every getter's answer.
+      `standalone/tests/probe_full.cpp` (built by `standalone/tests/build.sh`)
+      calls all 130 methods plus the two reserved VINTF transactions in
+      declaration order and prints `METHOD <kind> <name> <answer>`. Both the
+      Rust port and the C++ build were started under the instance
+      `ICharger/abtest` (`OPLUS_CHARGER_INSTANCE=abtest`,
+      `runcon u:r:hal_allocator_default:s0 su 1000 -c <binary>`) and probed;
+      transcripts in `/tmp/probe_{rust,cpp}_fresh.txt`. Both answer 132/132
+      OK; the only transcript differences are live readings that move between
+      the two runs (`battery_current_now`, `battery_voltage_now`,
+      `battery_sub_current`, `getChargerIdVolt`, `usb_input_current_now`).
+      The A/B also found and fixed five real port bugs: the parcelable reply
+      was missing the ndk non-null marker, `read_string` kept the wire NUL,
+      and `txn_getBattVoocChgIng` / `txn_getPsyUsbStatus` /
+      `txn_getBccCsvData` + four `queryChargeInfo` fields still used the
+      pre-remap node paths (RUST_DELTAS.md section 13).
 - [x] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — staged, md5
-      `e9ae132c825dcbb88027a24d8f27b9f8` (the Rust build with the V6 answer,
-      the X6739 node remap, the 25 W floor and the chargerid_volt scale
-      adapter). The pre-remap C++ build it replaced is kept at
+      `34c4210eb1db8c187f6961e64509e2b5` (407,704 bytes; the build that passed
+      the on-device A/B). The pre-remap C++ build it replaced is kept at
       `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V6-service.preremap.bak`
 - [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and
       `standalone/build.sh` now answer/generate version 6 / hash
       `ede5e600328119dbf1c38269f810a3fdce74029f`, matching the stock V6 HAL.
       The erofs binary now answers 6 (`RUST_DELTAS.md` §3)
-- [ ] 7.9 commit in the charger HAL git repo (the `rust/` tree is still untracked)
+- [x] 7.9 commit in the charger HAL git repo (`rust/` is tracked; the port
+      lands through the normal `ReconstructedHALSource/Oplus/OplusCharger`
+      history, latest `fix(charger): ...` after the device A/B)
 
 ## Feature inventory (must not be missed)
 

@@ -1333,6 +1333,12 @@ pub fn dispatch_interface_query(code: u32, out_p: &mut Parcel) -> Option<i32> {
 /// fields, then the size backpatched.  Identical to the generated
 /// testKitFeatureTestResult::writeToParcel.
 fn write_parcelable(out_p: &mut Parcel, r: &TestKitResult) {
+    // The generated Bp reads the return with ndk::AParcel_readParcelable,
+    // which consumes a non-null marker int32 before the parcelable body
+    // (binder_parcel_utils.h: AParcel_writeParcelable writes 1 first).
+    // Omitting it makes the client read the size field as the marker and
+    // then fail with STATUS_BAD_VALUE on the size check.
+    out_p.write_i32(1);
     let start = out_p.data_position();
     out_p.write_i32(0);
     out_p.write_i32(r.ret);

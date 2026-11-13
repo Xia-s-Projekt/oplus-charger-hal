@@ -49,6 +49,11 @@ unsafe extern "C" fn on_create(_args: *mut std::ffi::c_void) -> *mut std::ffi::c
     std::ptr::null_mut()
 }
 
+// The platform's AIBinder_Class_define rejects a null onDestroy (its
+// disassembly returns null for every null argument), so the class must
+// carry one even though the service owns nothing in the context.
+unsafe extern "C" fn on_destroy(_context: *mut std::ffi::c_void) {}
+
 /// The instance suffix can be overridden so a test build can register next
 /// to the HAL that is already running on the device.  Unset - the shipped
 /// behaviour - means "/default".
@@ -64,11 +69,15 @@ fn register_charger_service() -> i32 {
     let _ = CHARGER.set(c);
     c.set_running(true);
 
+    let descriptor = match CString::new(SERVICE_NAME) {
+        Ok(d) => d,
+        Err(_) => return -1,
+    };
     let class = unsafe {
         binder::AIBinder_Class_define(
-            SERVICE_NAME.as_ptr() as *const std::ffi::c_char,
+            descriptor.as_ptr(),
             Some(on_create),
-            None,
+            Some(on_destroy),
             Some(on_transact),
         )
     };

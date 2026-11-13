@@ -230,3 +230,42 @@ The MMI request is deliberately kept out of `bypass::Inputs`: the policy
 struct stays the Oplus-feature-only unit-testable surface, and the C++ and
 Rust `applyBypassPolicy` fold it into the decision (`value = 1,
 anyRequest = true`) after `decide()`.
+
+## 13. Wire-format corrections found by the on-device A/B (not deltas)
+
+The probe-full A/B (`standalone/tests/probe_full.cpp`, RUST_PORT.md 7.6)
+surfaced three port defects that are bugs, not intentional differences. All
+were fixed to match the generated C++ exactly, and are recorded here so the
+wire format is documented in one place.
+
+1. **Parcelable reply missing the non-null marker.** The generated Bp reads
+   a parcelable return through `ndk::AParcel_readParcelable`
+   (binder_parcel_utils.h:698), which consumes an int32 marker first and
+   requires it non-zero. `ndk::AParcel_writeParcelable` writes `1` before
+   `writeToParcel`. `txn.rs`'s `write_parcelable` skipped the marker, so
+   `testKitFeatureTest` replies made the client read the parcelable size as
+   the marker and fail with `STATUS_BAD_VALUE` (-22). Fixed by writing the
+   marker before the size backpatch.
+2. **`read_string` kept the wire NUL.** `AParcelStringAllocator` is called
+   with a length that *includes* the NUL terminator (binder_parcel.h). The
+   Rust allocator sized the Vec to that length, so every AIDL `String` read
+   carried an interior NUL; `CString::new` then rejected the value when it
+   was written back out, which silently dropped the string from the reply
+   (`getUsbCurrentEyeDiagram` after `setUsbEyeDiagram` answered a 4-byte
+   reply and the client saw -2147483640). Fixed by truncating the trailing
+   NUL after the read.
+3. **Pre-remap node paths still live in the hand-written accessors.** The
+   X6739 remap (section 11) was applied to the generated accessors but not
+   to five hand-written call sites: `txn_getBattVoocChgIng`
+   (`fast_chg_indicator` primary), `txn_getPsyUsbStatus`
+   (`charger/online` fallback), `txn_getBccCsvData` (`cool_down` ->
+   `Thermal_throttle`), and `queryChargeInfo`'s `battery_voocchg_ing`,
+   `battery_ppschg_ing`, `battery_sub_current`, `usb_input_current_now`.
+   All now match `Charger.cpp` / `ChargerManual.cpp` line for line.
+
+Also corrected during the A/B: `KernelTest::run_test` in `testkit.rs`
+returned `-ENODEV` when the device is missing, but the C++ caller
+(`Charger::testKitFeatureTest`) propagates `KernelTest::open()`'s return,
+which is `-1` (the `::open()` failure value, not `-errno` despite the class
+comment). The probe showed the C++ HAL answering `ret=-1`; the Rust port now
+matches.

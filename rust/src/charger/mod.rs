@@ -289,9 +289,12 @@ impl Charger {
     // Shipped ELF 0x1cf54: reads voocchg_ing, and when the wireless driver
     // holds the status the cached value is returned instead.
     pub(crate) fn txn_getBattVoocChgIng(&self) -> i32 {
-        let mut value = Self::read_int_path("/sys/class/power_supply/battery/voocchg_ing");
+        let mut value = Self::read_int_path("/sys/devices/platform/charger/fast_chg_indicator");
         if nodes::is_error(value) {
             value = Self::read_int_path("/sys/class/oplus_chg/battery/voocchg_ing");
+            if nodes::is_error(value) {
+                value = Self::read_int_path("/sys/devices/platform/charger/fast_chg_indicator");
+            }
         }
         if nodes::is_error(value) {
             value = if self.fast_charge_type() == constants::ChargeTechnology::Svooc {
@@ -650,7 +653,7 @@ impl Charger {
         Self::append_int(
             &mut out,
             "battery_sub_current",
-            Self::read_int_path("/sys/class/power_supply/battery/sub_current"),
+            Self::read_int_path("/sys/class/power_supply/battery/current_avg"),
         );
         Self::append_int(
             &mut out,
@@ -660,12 +663,12 @@ impl Charger {
         Self::append_int(
             &mut out,
             "battery_voocchg_ing",
-            Self::read_int_path("/sys/class/power_supply/battery/voocchg_ing"),
+            Self::read_int_path("/sys/devices/platform/charger/fast_chg_indicator"),
         );
         Self::append_int(
             &mut out,
             "battery_ppschg_ing",
-            Self::read_int_path("/sys/class/oplus_chg/battery/ppschg_ing"),
+            Self::read_int_path("/sys/devices/platform/charger/fast_chg_indicator"),
         );
         Self::append_int(
             &mut out,
@@ -675,7 +678,7 @@ impl Charger {
         Self::append_int(
             &mut out,
             "usb_input_current_now",
-            Self::read_int_path("/sys/class/power_supply/usb/input_current_now"),
+            Self::read_int_path("/sys/class/power_supply/charger/input_current_limit"),
         );
         Self::append_int(
             &mut out,
@@ -809,7 +812,7 @@ impl Charger {
         Self::append_int(
             &mut out,
             "cool_down",
-            Self::read_int_path("/sys/class/power_supply/battery/cool_down"),
+            Self::read_int_path("/sys/devices/platform/charger/Thermal_throttle"),
         );
         Self::append_int(
             &mut out,
@@ -912,7 +915,7 @@ impl Charger {
     pub(crate) fn txn_getPsyUsbStatus(&self) -> i32 {
         let mut val = nodes::read_node_int(
             "/sys/class/power_supply/usb/usb_status",
-            Some("/sys/class/oplus_chg/usb/usb_status"),
+            Some("/sys/class/power_supply/charger/online"),
         );
         if nodes::is_error(val) {
             val = 0;

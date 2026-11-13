@@ -77,12 +77,15 @@ impl KernelTest {
         Some(idx.to_string())
     }
 
-    /// Returns (rc, result).  rc is 0 on success, the negative errno
-    /// otherwise; the C++ code stores errno (positive) in the same slot.
+    /// Returns (rc, result).  rc mirrors the C++ chain in
+    /// Charger::testKitFeatureTest: on an ioctl failure runTest returns the
+    /// positive errno, and when the device never opened the caller sees
+    /// KernelTest::open()'s return, which is -1 (::open's failure value, not
+    /// -errno despite the class comment).
     pub fn run_test(&self, index: u32) -> (i32, Option<String>) {
         let fd = match self.fd() {
             Some(f) => f,
-            None => return (-libc::ENODEV, None),
+            None => return (-1, None),
         };
         // struct { unsigned int index; char text[504]; }
         #[repr(C)]
@@ -128,8 +131,4 @@ fn errno() -> i32 {
         fn __errno() -> *mut i32;
     }
     unsafe { *__errno() }
-}
-
-mod libc {
-    pub const ENODEV: i32 = 19;
 }
