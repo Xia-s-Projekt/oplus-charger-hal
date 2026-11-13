@@ -288,6 +288,20 @@ impl Drop for Parcel {
 
 /// Allocator handed to AParcel_readString.  length includes the NUL
 /// terminator; -1 means the parcel carried a null string.
+///
+/// Per the NDK contract (binder_parcel.h) `buffer` is "a buffer of size
+/// 'length' or null if allocation failed", and on the -1 path the allocator
+/// only has to record the null - it must not touch `buffer` at all, because
+/// the caller may pass a null pointer there.  Dereferencing it was the
+/// SEGV_MAPERR at 0x0 that killed the service on a missing argument.
+///
+/// The -1 path also has to answer `false`: `AParcel_readString` (disassembled
+/// from this device's libbinder_ndk.so) returns STATUS_OK only when the
+/// allocator returns true, and the C++ std::string allocator returns false
+/// there because a std::string cannot hold null.  Answering true instead let
+/// the read succeed with an empty string, so a one-argument method got called
+/// with an empty argument where the generated C++ stub answers
+/// STATUS_UNEXPECTED_NULL (-2147483640) and never runs the body.
 unsafe extern "C" fn alloc_vec(
     string_data: *mut c_void,
     length: i32,
@@ -296,14 +310,22 @@ unsafe extern "C" fn alloc_vec(
     if string_data.is_null() {
         return false;
     }
-    let out = unsafe { &mut *(string_data as *mut Vec<u8>) };
     if length < 0 {
-        out.clear();
-        *buffer = std::ptr::null_mut();
-        return true;
+        // A null string on the wire: this interface declares no @nullable
+        // strings, so treat it as a failed read exactly like the C++ stub.
+        return false;
     }
+    // SAFETY: string_data is the &mut Vec<u8> captured by read_string and
+    // stays valid for the whole AParcel_readString call.
+    let out = unsafe { &mut *(string_data as *mut Vec<u8>) };
     out.clear();
     out.resize(length as usize, 0);
-    *buffer = out.as_mut_ptr() as *mut c_char;
+    if buffer.is_null() {
+        // Allocation cannot be reported; tell the caller to fail the read.
+        return false;
+    }
+    // SAFETY: buffer is a valid out-param and the Vec's buffer stays alive and
+    // immovable for the whole read because it lives in read_string's frame.
+    unsafe { *buffer = out.as_mut_ptr() as *mut c_char };
     true
 }

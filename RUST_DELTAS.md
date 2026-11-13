@@ -320,3 +320,60 @@ The fix in both languages reads the Oplus path only and falls back to `0`
 this device, verified with probe_full against both the C++ and the Rust
 build. Charging is unaffected: `mUsbStatus` has no consumer in
 `OplusBatteryService` beyond the broadcast and the dumpsys output.
+
+## 16. `alloc_vec`: the stress-test segfault and the null-string contract
+
+The adversarial harness (`standalone/tests/fuzz_stress.cpp`, mode `malformed`)
+found a **reproducible SIGSEGV** that the 132/132 typed sweep never touched:
+calling any one-argument method with a token-only parcel killed the service.
+
+Crash evidence from debuggerd: `signal 11 (SEGV_MAPERR), fault addr 0x0`, with
+`x1 = 0xffffffff` (length = -1) and `x2 = 0` (buffer = NULL), backtrace
+`alloc_vec <- Parcel::read_string <- txn::dispatch <- on_transact`.
+
+Disassembling this device's `libbinder_ndk.so` `AParcel_readString` gave the
+contract the crash happened under: when the parcel has no string (EOF or a
+Java-style null), the NDK calls the allocator once with `length = -1` and
+`buffer = NULL`, then returns STATUS_OK only if the allocator returned true:
+
+    cbz   x0, 173d0        ; readString16Inplace returned nothing
+    mov   w1, #-0x1        ; length = -1
+    mov   x2, xzr          ; buffer = NULL
+    blr   x19              ; our allocator
+    csel  w0, wzr, w8, ne  ; true -> STATUS_OK, false -> 0x80000008
+
+Two bugs in the Rust allocator, both fixed:
+
+1. On the -1 path it wrote `*buffer = null_mut()` through a NULL `buffer`
+   pointer - the segfault.  The NDK header documents `buffer` as "a buffer of
+   size 'length' **or null if allocation failed**", so it must never be
+   dereferenced without a null check.  Both branches now guard it.
+2. Answering `true` on the -1 path made `read_string` return `Ok("")` instead
+   of an error, so the dispatch ran the method body with an empty argument
+   where the generated C++ stub never runs it.  The C++'s `std::string`
+   allocator returns **false** on that path (a `std::string` cannot hold null),
+   which is why `AParcel_readData` fails there with
+   `0x80000008` (STATUS_UNEXPECTED_NULL) and the stub breaks before the body.
+   ICharger declares no `@nullable` strings, so our allocator now also returns
+   false on the -1 path.
+
+Parity after the fix, both builds answering the same adversarial corpus
+(5 rounds each, 135 calls/round: 130 methods with a token-only parcel plus 5
+truncated-argument calls): `ok=85 failed=50` on Rust and C++ alike;
+out-of-range codes 11 rejected + 2 reserved OK on both; 128 KiB string
+arguments on the in-memory setters `ok=10 failed=3` on both; in-memory
+round-trip 7/7 on both.  The only remaining difference is the exact int the
+client sees for a rejected call (INT32_MIN vs INT32_MIN+8), which comes from
+how libbinder surfaces the two non-OK statuses; both are failures, no body
+runs, and no well-formed client can hit the path.
+
+One behaviour that is NOT a port defect: on a failed registration
+(`addService` returns non-OK) the service logs and then blocks in
+`ABinderProcess_joinThreadPool` forever instead of exiting.  The shipped C++
+`main()` does exactly the same (`src/service.cpp`), so the port is faithful -
+but it means a half-registered instance has to be killed by PID.
+
+The harness fixes along the way: `wait` in the runner must target the worker
+PIDs only (the instance is also a background child), and the resource snapshot
+has to resolve the HAL by process name (`pgrep -x`) - the launch wrapper's `sh`
+has the same name in `ps -A` output and was tracked for a while instead.

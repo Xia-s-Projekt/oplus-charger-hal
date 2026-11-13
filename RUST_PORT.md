@@ -153,7 +153,7 @@ verified, `[ ]` not done.
       `txn_getBccCsvData` + four `queryChargeInfo` fields still used the
       pre-remap node paths (RUST_DELTAS.md section 13).
 - [x] 7.7 stage to `erofs/vendor/bin/hw/` under the V6 name — staged, md5
-      `c3cb79d40977ff4d1d6f18d28a6c957c` (407,384 bytes; the build that passed
+      `b30e98bc05d6d8fd40ce34cba45b202c` (407,384 bytes; the build that passed
       the on-device A/B). The pre-remap C++ build it replaced is kept at
       `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V6-service.preremap.bak`
 - [~] 7.8 VINTF version — resolved in source: the Rust dispatcher and
@@ -242,7 +242,7 @@ lint annotations, or provably-identical refactors; no behaviour changed.
 
 On-device measurements (abtest instance + the live `/vendor` service):
 
-- Rebuilt binary: md5 `c3cb79d40977ff4d1d6f18d28a6c957c`, re-staged to
+- Rebuilt binary: md5 `b30e98bc05d6d8fd40ce34cba45b202c`, re-staged to
   `erofs/vendor/bin/hw/`.  `getPsyUsbStatus OK 0`, `getPsyUsbOnline OK 1`,
   probe_full 132/132 OK with **zero FAIL**, and the A/B diff against the C++
   build shows only live readings (`getBattSubCurrent`,
@@ -261,3 +261,35 @@ On-device measurements (abtest instance + the live `/vendor` service):
   window while the mt6360 charger stabilised.  Our netlink socket drains
   them the way the C++ does, so each queued uevent turns into one
   monit-loop iteration during that window.
+
+## 19. The adversarial stress test (2026-11-13)
+
+`standalone/tests/fuzz_stress.cpp` drives five modes against the abtest
+instance: `malformed` (every one of the 130 codes, first with a token-only
+parcel then with a truncated argument list), `range` (codes outside the
+1..130 band plus the reserved VINTF pair), `big` (128 KiB string arguments on
+the in-memory setters), `roundtrip`, and a fixed-duration `hammer`.
+
+The first run found a **reproducible SIGSEGV** in `alloc_vec` (details and the
+disassembly-derived contract in RUST_DELTAS.md section 16): a one-argument
+method called with no argument killed the service, because our string
+allocator dereferenced the NULL `buffer` pointer the NDK hands it on the
+null-string path.  The generated C++ stub rejects the same call, so this was a
+real port defect the 132/132 typed sweep could not reach.  Fixed, and the
+null-string path now answers false so the dispatch does not run a method body
+on an empty-argument read.
+
+Final state, both builds, same corpus, 5 rounds each:
+
+- malformed: 135 calls/round, `ok=85 failed=50` on Rust and C++ alike
+- range: 11 rejected + 2 reserved OK, identical
+- big: `ok=10 failed=3`, identical
+- roundtrip: 7/7, identical
+- hammer: 1528 calls/30 s single client and 8 x 20 s concurrent clients, zero
+  failures on both; RSS plateaued (6.1 -> 7.2 MB and stayed flat), threads 2,
+  fds 8/32768 - no leak
+- post-storm regression sweep: 132/132 on both
+- bypass-charge toggle cycles under the storm: prop 0->1->0 x3 drove the
+  `bypass_charger` node 0->1->0 every cycle, the service alive throughout
+- killed mid-storm and restarted: re-registered and answered 132/132
+- tombstones unchanged (64 before/after), the service's own log empty
