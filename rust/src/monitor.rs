@@ -259,12 +259,13 @@ pub fn run_monitor_loop(charger: &Charger) {
             crate::log::info(&format!(
                 "Power change detected: watts={last_watts}->{watts} online={last_online}->{online} status={last_status}->{status}"
             ));
+            let plug_changed = online != last_online;
             last_watts = watts;
             last_online = online;
             last_status = status;
 
             charger.fast_charge_refresh_pub();
-            charger.trigger_battery_update(true);
+            charger.trigger_battery_update(plug_changed);
             pulse_countdown = if online == 1 { PULSE_COUNT } else { 1 };
             last_pulse = now;
         } else if pulse_countdown > 0 {
