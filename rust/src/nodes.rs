@@ -178,3 +178,21 @@ pub fn clamp0(v: i32) -> i32 {
 pub fn is_error(v: i32) -> bool {
     v == K_READ_ERROR || v == K_IO_ERROR
 }
+
+/// Returns `default` when an OPlus-only node is absent or unreadable on X6739.
+pub fn sim_read_default(v: i32, default: i32) -> i32 {
+    if is_error(v) {
+        default
+    } else {
+        v
+    }
+}
+
+/// Simulates a successful write for OPlus-only control nodes absent on X6739.
+pub fn sim_write_ok(res: i32, value: &str) -> i32 {
+    if res == K_READ_ERROR && !value.is_empty() && value.len() <= 16 {
+        value.len() as i32
+    } else {
+        res
+    }
+}

@@ -117,13 +117,15 @@ pub fn parse_up_limit(value: &str, state: &mut i32, percent: &mut i32) {
     }
 }
 
+const MIN_BYPASS_CAPACITY: i32 = 15;
+
 fn feature_engaged(requested: bool, target_percent: i32, capacity: i32) -> bool {
     if !requested {
         return false;
     }
     if target_percent <= 0 {
-        // No target: the feature is on as soon as it is requested.
-        return true;
+        // Guard against starving a critically low battery when no explicit target is set.
+        return capacity >= MIN_BYPASS_CAPACITY;
     }
     if capacity < 0 {
         // The battery percent is unknown; do not engage.

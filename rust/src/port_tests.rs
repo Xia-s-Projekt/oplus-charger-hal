@@ -96,3 +96,20 @@ fn node_sentinels_match_cpp() {
     assert_eq!(constants::K_FAST_CHARGE_WATTS, 33);
     assert_eq!(constants::K_SUPER_VOOC_WATTS, 45);
 }
+
+#[test]
+fn bypass_low_battery_floor() {
+    // When no explicit target is set, bypass stays off below 15% capacity.
+    assert_eq!(node_for(1, 0, -1, 0, 5), 0);
+    assert_eq!(node_for(1, 0, -1, 0, 14), 0);
+    assert_eq!(node_for(1, 0, -1, 0, 15), 1);
+}
+
+#[test]
+fn sim_node_helpers_mask_missing_oplus_nodes() {
+    use crate::nodes::{sim_read_default, sim_write_ok};
+    assert_eq!(sim_read_default(constants::K_READ_ERROR, 1), 1);
+    assert_eq!(sim_read_default(0, 1), 0);
+    assert_eq!(sim_write_ok(constants::K_READ_ERROR, "1"), 1);
+    assert_eq!(sim_write_ok(constants::K_READ_ERROR, ""), constants::K_READ_ERROR);
+}

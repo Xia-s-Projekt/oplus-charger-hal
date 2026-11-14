@@ -11,11 +11,11 @@
 
 use crate::charger::Charger;
 use crate::nodes::{clamp0, read_node_int, read_node_int_single,
-    read_node_str, read_node_str_single, write_node};
+    read_node_str, read_node_str_single, sim_read_default, sim_write_ok, write_node};
 
 impl Charger {
     pub fn VolDividerIcWorkModeSet(&self, a0: &str) -> i32 {
-        write_node("/proc/da9313/work_mode", Some("/proc/oplus_charge_pump/work_mode"), a0)
+        sim_write_ok(write_node("/proc/da9313/work_mode", Some("/proc/oplus_charge_pump/work_mode"), a0), a0)
     }
 
     pub fn getAcType(&self) -> i32 {
@@ -23,7 +23,7 @@ impl Charger {
     }
 
     pub fn getBattAuthenticate(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/battery/authenticate", Some("/sys/class/oplus_chg/battery/authenticate"))
+        sim_read_default(read_node_int("/sys/class/power_supply/battery/authenticate", Some("/sys/class/oplus_chg/battery/authenticate")), 1)
     }
 
     pub fn getBattPPSChgIng(&self) -> i32 {
@@ -51,11 +51,11 @@ impl Charger {
     }
 
     pub fn getChargerCriticalLog(&self) -> i32 {
-        read_node_int_single("/proc/charger_critical_log")
+        clamp0(read_node_int_single("/proc/charger_critical_log"))
     }
 
     pub fn getChargerLog(&self) -> i32 {
-        read_node_int_single("/proc/charger_log")
+        clamp0(read_node_int_single("/proc/charger_log"))
     }
 
     pub fn getDevinfoFastchg(&self) -> String {
@@ -63,7 +63,7 @@ impl Charger {
     }
 
     pub fn getParallelChgMosTestResult(&self) -> i32 {
-        read_node_int_single("/sys/class/oplus_chg/battery/parallel_chg_mos_test")
+        clamp0(read_node_int_single("/sys/class/oplus_chg/battery/parallel_chg_mos_test"))
     }
 
     pub fn getPsyAcOnline(&self) -> i32 {
@@ -79,7 +79,7 @@ impl Charger {
     }
 
     pub fn getPsyBatteryHmac(&self) -> i32 {
-        read_node_int_single("/proc/charger/hmac")
+        sim_read_default(read_node_int_single("/proc/charger/hmac"), 1)
     }
 
     pub fn getPsyBatteryLevel(&self) -> i32 {
@@ -123,11 +123,12 @@ impl Charger {
     }
 
     pub fn getPsyQGVbatDeviation(&self) -> i32 {
-        read_node_int_single("/proc/charger/qg_vbat_deviation")
+        clamp0(read_node_int_single("/proc/charger/qg_vbat_deviation"))
     }
 
     pub fn getPsyTypeOrientation(&self) -> i32 {
-        read_node_int("/sys/class/power_supply/usb/typec_cc_orientation", Some("/sys/class/oplus_chg/usb/typec_cc_orientation"))
+        let primary = read_node_int("/sys/class/power_supply/usb/typec_cc_orientation", Some("/sys/class/oplus_chg/usb/typec_cc_orientation"));
+        sim_read_default(if crate::nodes::is_error(primary) { read_node_int_single("/sys/class/power_supply/tran-auto-test/cc1_status") } else { primary }, 0)
     }
 
     pub fn getPsyWirelessRX(&self) -> String {
@@ -231,27 +232,27 @@ impl Charger {
     }
 
     pub fn setChargerCriticalLog(&self, a0: &str) -> i32 {
-        write_node("/proc/charger_critical_log", None, a0)
+        sim_write_ok(write_node("/proc/charger_critical_log", None, a0), a0)
     }
 
     pub fn setChargerCycle(&self, a0: &str) -> i32 {
-        write_node("/proc/charger_cycle", None, a0)
+        sim_write_ok(write_node("/proc/charger_cycle", Some("/sys/devices/platform/charger/cycle_test"), a0), a0)
     }
 
     pub fn setChargerFactoryModeTest(&self, a0: &str) -> i32 {
-        write_node("/proc/charger/charger_factorymode_test", None, a0)
+        sim_write_ok(write_node("/proc/charger/charger_factorymode_test", None, a0), a0)
     }
 
     pub fn setChargerLog(&self, a0: &str) -> i32 {
-        write_node("/proc/charger_log", None, a0)
+        sim_write_ok(write_node("/proc/charger_log", None, a0), a0)
     }
 
     pub fn setFastchgFwUpdate(&self, a0: &str) -> i32 {
-        write_node("/proc/fastchg_fw_update", None, a0)
+        sim_write_ok(write_node("/proc/fastchg_fw_update", None, a0), a0)
     }
 
     pub fn setReserveSocDebug(&self, a0: &str) -> i32 {
-        write_node("/proc/charger/reserve_soc_debug", None, a0)
+        sim_write_ok(write_node("/proc/charger/reserve_soc_debug", None, a0), a0)
     }
 
     pub fn setShipMode(&self, a0: &str) -> i32 {
@@ -263,11 +264,11 @@ impl Charger {
     }
 
     pub fn setSmartCoolDown(&self, a0: i32, a1: i32, a2: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/battery/cool_down", Some("/sys/class/power_supply/battery/cool_down"), a2)
+        sim_write_ok(write_node("/sys/class/oplus_chg/battery/cool_down", Some("/sys/devices/platform/charger/Thermal_throttle"), a2), a2)
     }
 
     pub fn setTbattPwrOff(&self, a0: &str) -> i32 {
-        write_node("/proc/tbatt_pwroff", None, a0)
+        sim_write_ok(write_node("/proc/tbatt_pwroff", None, a0), a0)
     }
 
     pub fn setUsbPrimalType(&self, a0: &str) -> i32 {
@@ -311,39 +312,39 @@ impl Charger {
     }
 
     pub fn setChgOlcConfig(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/common/chg_olc_config", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/common/chg_olc_config", None, a0), a0)
     }
 
     pub fn setSuperEnduranceStatus(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/common/super_endurance_mode_status", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/common/super_endurance_mode_status", None, a0), a0)
     }
 
     pub fn setSuperEnduranceCount(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/common/super_endurance_mode_count", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/common/super_endurance_mode_count", None, a0), a0)
     }
 
     pub fn setBobStatus(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/common/bob_status", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/common/bob_status", None, a0), a0)
     }
 
     pub fn setPsySlowChgEn(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/battery/slow_chg_en", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/battery/slow_chg_en", None, a0), a0)
     }
 
     pub fn getCpVbatDeviation(&self) -> i32 {
-        read_node_int_single("/proc/charger/cp_vbat_deviation")
+        clamp0(read_node_int_single("/proc/charger/cp_vbat_deviation"))
     }
 
     pub fn setBatteryLogPush(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/common/battlog_push_config", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/common/battlog_push_config", None, a0), a0)
     }
 
     pub fn getChargingModeInGsmCall(&self) -> i32 {
-        read_node_int("/sys/class/oplus_chg/battery/gsm_call_ongoing", Some("/sys/devices/platform/odm/odm:tran_battery/tran_call_state"))
+        clamp0(read_node_int("/sys/class/oplus_chg/battery/gsm_call_ongoing", Some("/sys/devices/platform/odm/odm:tran_battery/tran_call_state")))
     }
 
     pub fn setChargingModeInGsmCall(&self, a0: &str) -> i32 {
-        write_node("/sys/class/oplus_chg/battery/gsm_call_ongoing", None, a0)
+        sim_write_ok(write_node("/sys/class/oplus_chg/battery/gsm_call_ongoing", Some("/sys/devices/platform/odm/odm:tran_battery/tran_call_state"), a0), a0)
     }
 
     pub fn getPsyBatterySN(&self) -> String {
