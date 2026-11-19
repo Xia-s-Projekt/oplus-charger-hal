@@ -58,7 +58,7 @@ is tied to a particular checkout path.
 
 ## Prebuilt
 
-[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-charger-hal/releases/latest) — prebuilt AArch64 service binaries (C++ and Rust).
+[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-charger-hal/releases/latest) — two AArch64 ODM archives (C++ and Rust). Each contains the service under `odm/bin/hw/`, its init rc under `odm/etc/init/`, and the VINTF manifest under `odm/etc/vintf/manifest/`.
 
 ## Build
 
