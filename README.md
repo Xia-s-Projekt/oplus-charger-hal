@@ -56,6 +56,10 @@ standalone/tools/                    auxiliary tooling
 All dependency locations come from the environment or the build scripts; none
 is tied to a particular checkout path.
 
+## Prebuilt
+
+[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-charger-hal/releases/latest) — prebuilt AArch64 service binaries (C++ and Rust).
+
 ## Build
 
 C++ service:
