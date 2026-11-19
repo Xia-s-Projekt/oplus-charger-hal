@@ -4,8 +4,8 @@
 //
 // The loop watches the bypass prop, the charger online state, the battery
 // status and the adapter wattage, and re-derives the bypass node whenever
-// the prop changes.  It also pulses the battery-property push after a state
-// change so SystemUI repaints the charging indicator.
+// the prop changes.  It pushes exactly one battery-property update after a
+// real state change so SystemUI repaints the charging indicator.
 
 use std::ffi::CString;
 use std::sync::Mutex;
@@ -18,10 +18,15 @@ use crate::nodes;
 use crate::props;
 
 const TRIGGER_MIN_GAP_MS: u64 = 75;
-const PULSE_INTERVAL_MS: u128 = 150;
-const PULSE_COUNT: i32 = 4;
+// Fast 20 ms polling only while charging and only inside the plug-in window.
 const FAST_POLL_MS: i64 = 20;
-const SLOW_POLL_MS: i64 = 100;
+// Charging but past the fast window (or on SuperVOOC): keep the old 100 ms.
+const ACTIVE_POLL_MS: i64 = 100;
+// Unplugged, or when the uevent socket is unavailable: idle at ~700 ms so
+// the loop stops scanning sysfs and the property every 100 ms.  A netlink
+// uevent still wakes the poll immediately on plug-in; a bypass-prop change
+// is a plain property, so <=700 ms detection latency is acceptable.
+const IDLE_POLL_MS: i64 = 700;
 const FAST_POLL_WINDOW_MS: u128 = 15000;
 const UEVENT_BUFFER_SIZE: usize = 2048;
 
@@ -96,9 +101,7 @@ pub fn run_monitor_loop(charger: &Charger) {
     let mut last_watts: i32 = -1;
     let mut last_online: i32 = -1;
     let mut last_status = String::new();
-    let mut pulse_countdown: i32 = 0;
     let mut online_since = std::time::Instant::now();
-    let mut last_pulse = std::time::Instant::now();
     let mut last_bypass_prop: i32 = -1;
     let mut last_bypass_node: i32 = -1;
 
@@ -134,15 +137,21 @@ pub fn run_monitor_loop(charger: &Charger) {
     }
 
     while charger.running() {
+        // At most one battery-property push per iteration: a single
+        // `service call batteryproperties 2` makes SystemUI re-read all
+        // battery state, so re-pushing for several changes in one pass is
+        // redundant process creation.
+        let mut pushed_this_iteration = false;
         let now = std::time::Instant::now();
         let online_elapsed = now.duration_since(online_since).as_millis();
-        let poll_timeout_ms = if last_online == 1
-            && last_watts < K_SUPER_VOOC_WATTS
-            && online_elapsed < FAST_POLL_WINDOW_MS
-        {
-            FAST_POLL_MS
+        let poll_timeout_ms = if last_online == 1 {
+            if last_watts < K_SUPER_VOOC_WATTS && online_elapsed < FAST_POLL_WINDOW_MS {
+                FAST_POLL_MS
+            } else {
+                ACTIVE_POLL_MS
+            }
         } else {
-            SLOW_POLL_MS
+            IDLE_POLL_MS
         };
 
         if uevent_fd >= 0 {
@@ -191,7 +200,10 @@ pub fn run_monitor_loop(charger: &Charger) {
             let applied = charger.apply_bypass_policy(true);
             if applied >= 0 {
                 last_bypass_node = applied;
-                charger.trigger_battery_update(true);
+                if !pushed_this_iteration {
+                    charger.trigger_battery_update(true);
+                    pushed_this_iteration = true;
+                }
             }
         }
 
@@ -206,8 +218,9 @@ pub fn run_monitor_loop(charger: &Charger) {
             let applied = charger.apply_bypass_policy(true);
             if applied >= 0 {
                 last_bypass_node = applied;
-                if applied != live_node {
+                if applied != live_node && !pushed_this_iteration {
                     charger.trigger_battery_update(true);
+                    pushed_this_iteration = true;
                 }
             }
         }
@@ -265,16 +278,8 @@ pub fn run_monitor_loop(charger: &Charger) {
             last_status = status;
 
             charger.fast_charge_refresh_pub();
-            charger.trigger_battery_update(plug_changed);
-            pulse_countdown = if online == 1 { PULSE_COUNT } else { 1 };
-            last_pulse = now;
-        } else if pulse_countdown > 0 {
-            let pulse_elapsed = now.duration_since(last_pulse).as_millis();
-            if pulse_elapsed >= PULSE_INTERVAL_MS {
-                pulse_countdown -= 1;
-                last_pulse = now;
-                charger.fast_charge_refresh_pub();
-                charger.trigger_battery_update(true);
+            if !pushed_this_iteration {
+                charger.trigger_battery_update(plug_changed);
             }
         }
     }

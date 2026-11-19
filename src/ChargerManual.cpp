@@ -310,12 +310,20 @@ void* Charger::monitorThreadFunc(void* arg) {
 int applyBypassPolicy(bool force);
 
 void Charger::runMonitorLoop() {
+    // Fast 20 ms polling only while charging and only inside the plug-in
+    // window; 100 ms while charging past it; 700 ms when unplugged or when
+    // the uevent socket is unavailable.  A netlink uevent still wakes the
+    // poll immediately on plug-in, and a bypass-prop change is detected in
+    // at most 700 ms, which is within the acceptable latency.
+    static constexpr int kFastPollMs = 20;
+    static constexpr int kActivePollMs = 100;
+    static constexpr int kIdlePollMs = 700;
+    static constexpr int64_t kFastPollWindowMs = 15000;
+
     int lastWatts = -1;
     int lastOnline = -1;
     std::string lastStatus = "";
-    int pulseCountdown = 0;
     auto onlineSinceTime = std::chrono::steady_clock::now();
-    auto lastPulseTime = std::chrono::steady_clock::now();
     int lastBypassProp = -1;
     int lastBypassNode = -1;
 
@@ -337,9 +345,20 @@ void Charger::runMonitorLoop() {
     }
 
     while (mRunning.load(std::memory_order_relaxed)) {
+        // At most one battery-property push per iteration: a single
+        // `service call batteryproperties 2` makes SystemUI re-read all
+        // battery state, so re-pushing for several changes in one pass is
+        // redundant process creation.
+        bool pushedThisIteration = false;
         auto now = std::chrono::steady_clock::now();
         auto onlineElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - onlineSinceTime).count();
-        int pollTimeoutMs = (lastOnline == 1 && lastWatts < kSuperVoocWatts && onlineElapsedMs < 15000) ? 20 : 100;
+        int pollTimeoutMs;
+        if (lastOnline == 1) {
+            pollTimeoutMs = (lastWatts < kSuperVoocWatts && onlineElapsedMs < kFastPollWindowMs)
+                            ? kFastPollMs : kActivePollMs;
+        } else {
+            pollTimeoutMs = kIdlePollMs;
+        }
         if (ueventFd >= 0) {
             struct pollfd pfd;
             pfd.fd = ueventFd;
@@ -371,7 +390,10 @@ void Charger::runMonitorLoop() {
             int applied = applyBypassPolicy(true);
             if (applied >= 0) {
                 lastBypassNode = applied;
-                triggerBatteryUpdate(true);
+                if (!pushedThisIteration) {
+                    triggerBatteryUpdate(true);
+                    pushedThisIteration = true;
+                }
             }
         }
 
@@ -386,8 +408,9 @@ void Charger::runMonitorLoop() {
             int applied = applyBypassPolicy(true);
             if (applied >= 0) {
                 lastBypassNode = applied;
-                if (applied != liveNode) {
+                if (applied != liveNode && !pushedThisIteration) {
                     triggerBatteryUpdate(true);
+                    pushedThisIteration = true;
                 }
             }
         }
@@ -445,17 +468,7 @@ void Charger::runMonitorLoop() {
             if (mFastCharge) {
                 mFastCharge->refresh();
             }
-            triggerBatteryUpdate(true);
-            pulseCountdown = (online == 1) ? 4 : 1;
-            lastPulseTime = now;
-        } else if (pulseCountdown > 0) {
-            auto pulseElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastPulseTime).count();
-            if (pulseElapsedMs >= 150) {
-                pulseCountdown--;
-                lastPulseTime = now;
-                if (mFastCharge) {
-                    mFastCharge->refresh();
-                }
+            if (!pushedThisIteration) {
                 triggerBatteryUpdate(true);
             }
         }
