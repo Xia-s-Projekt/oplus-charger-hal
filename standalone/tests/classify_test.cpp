@@ -113,9 +113,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    printf("\n== end-to-end through the detector (Transsion nodes) ==\n");
-    // No oplus driver on this port: the detector must fall back to the
-    // Transsion pair and classify the watts itself.
+    printf("\n== end-to-end through the detector (charger-driver nodes) ==\n");
+    // Without the oplus driver, the detector must fall back to the
+    // charger-driver pair and classify the watts itself.
     expect("normal 5 W", dir, "", 0, "0", "5", 0, "UNKNOWN");
     expect("fast charge 33 W", dir, "", 0, "1", "33", 1, "VOOC");
     expect("fast charge 40 W", dir, "", 0, "1", "40", 1, "VOOC");

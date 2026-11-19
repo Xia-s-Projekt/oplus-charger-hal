@@ -64,8 +64,8 @@ fn bypass_policy_cases() {
     assert_eq!(node_for(-1, 0, 1, 80, 80), 1);
     assert_eq!(node_for(-1, 0, 0, 80, 90), 0);
 
-    // Game toggle with no target of its own follows the charge limit.
-    assert_eq!(node_for(1, 0, 1, 80, 79), 0);
+    // Game toggle with no target of its own engages at capacity >= 15 regardless of charge limit.
+    assert_eq!(node_for(1, 0, 1, 80, 79), 1);
     assert_eq!(node_for(1, 0, 1, 80, 80), 1);
 
     // Unknown capacity engages nothing.

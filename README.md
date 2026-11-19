@@ -1,142 +1,94 @@
-# OplusCharger — reconstructed vendor HAL
+# OplusCharger
 
-Source reconstruction of
-`erofs/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service` from the
-OxygenOS 16 port for the Infinix GT 10 Pro (X6739, MediaTek MT6893).
+A standalone implementation of the `vendor.oplus.hardware.charger` AIDL HAL.
+The project ships two implementations of the same interface: a C++ service and
+an equivalent Rust service. The interface is `@VintfStability` and is compiled
+with the AIDL NDK backend, so the result runs as a vendor process without a
+full AOSP source tree.
 
-The reconstruction is driven by the Transsion charger driver that this port
-actually runs, so the fast-charge detection works here instead of returning
-"no data" the way the shipped Oplus binary does.
+## What it does
 
-## What was reverse engineered
+The service implements `ICharger` by reading charge state from sysfs nodes and
+translating it into the values the framework expects. It:
 
-| Piece | Where the evidence is |
-|---|---|
-| The 126-method AIDL interface, in transaction order | `RE/evidence/oplus-charger/txn_codes.txt` (codes 1..126 read out of `BpCharger` in `vendor.oplus.hardware.charger-V3-ndk.so`) |
-| The `{name, id}` charge-technology table | shipped binary, file offset `0x510c0`, stride `0x28` |
-| The node path of every accessor | `RE/evidence/oplus-charger/strings.txt` (the shipped binary's own string table) |
-| The service name and instance | `/default` + the `ICharger` descriptor in the same string table |
-| The log tag and start message | `vendor.oplus.hardware.charger-V1-service`, `oplus charger service start` |
-| The read-failure sentinel | `INT32_MIN` (`0x80000000`), confirmed on-device against the shipped service |
-| The interface version | `3` — matches `<version>3</version>` in `vendor/etc/vintf/manifest/manifest_oplus_charger_aidl.xml` |
-| The interface hash | `587d614e5ed419609cd450643820624cf151d465` — read off the live shipped service with `standalone/tests/raw_hash` |
+- exposes charger, battery, USB, AC and wireless sysfs nodes through the AIDL
+  getters and setters;
+- classifies adapter power into charge technologies (unknown below 33 W, VOOC
+  from 33 W, SuperVOOC from 45 W) and reports it through the charge-info and
+  charge-technology queries;
+- runs the charge-detection check and a bypass-charge policy backed by a system
+  property;
+- answers the reserved `getInterfaceVersion` and `getInterfaceHash`
+  transactions required by the VINTF stability check.
 
-The version and hash are answered by the reserved AIDL transaction codes
-`0xfffffe` / `0xffffff`, which the method list does not contain. The build
-passes them to the compiler explicitly:
-
-```sh
-aidl --lang=ndk --structured --stability=vintf \
-     --version=3 --hash=587d614e5ed419609cd450643820624cf151d465 ...
-```
-
-Without them the service answers `UNKNOWN_TRANSACTION` for the reserved
-codes and the framework's VINTF stability check fails even though every
-real method works.
-
-The Transsion reference (`RE/evidence/trancharge/`) supplied the charger
-nodes: handler-table entry 0 `PUMPSTAT` -> `TransferPump_Express` reads
-`/sys/devices/platform/charger/Pump_Express` and
-`/sys/devices/platform/charger/adapter_capacity`.
-
-## The fast-charge classification
-
-The shipped Oplus HAL never classifies charging power itself - it reports
-what the kernel's `oplus_chg` driver published. This port has no `oplus_chg`
-driver (there is no `/sys/class/oplus_chg` on the device), so those getters
-returned `INT32_MIN` for "node unreadable".
-
-The reconstruction reads the Transsion nodes and classifies the watts:
-
-```
-adapter_capacity < 33 W   ->  UNKNOWN (0)   normal
-33 W .. 44 W              ->  VOOC    (1)   fast charge
-45 W and up               ->  SVOOC   (2)   SuperVOOC
-```
-
-When the `oplus_chg` driver *is* present its verdict wins, because the kernel
-has already made the call.
-
-The watts decide, not the pump: `Pump_Express` is reported on its own in the
-`queryChargeInfo` dump, but an adapter can negotiate 33 W or more without the
-VOOC pump, and gating on it would report a fast charge as "not charging".
+Unreadable nodes are reported with the interface error sentinel rather than
+raising an error.
 
 ## Layout
 
 ```
-aidl/vendor/oplus/hardware/charger/   the reconstructed .aidl interface
-include/charger/                       Charger, FastChargeDetector, ChgDetectionCheck, NodeControl
-src/                                   the implementation
-standalone/build.sh                    NDK build (no AOSP tree needed)
-standalone/verify.sh                   offline checks on the built binary
-standalone/tests/                      device-side tests
-RE/evidence/                           the reverse-engineering evidence
+aidl/vendor/oplus/hardware/charger/  AIDL interface definitions
+include/charger/                     C++ headers
+src/                                 C++ implementation and service entry point
+rust/                                Rust implementation (library and binary)
+rust/gen_*.py                        generators for Rust accessor/txn code
+standalone/build.sh                  C++ NDK build
+standalone/verify.sh                 offline verification of the built artifact
+standalone/tests/                    host and integration test sources
+standalone/scripts/                  AIDL and C++ source generators
+standalone/tools/                    auxiliary tooling
 ```
 
-`src/Charger.cpp` and `include/charger/Charger.h` are generated by
-`standalone/scripts/gen_charger_sources.py` from the recovered method list.
-The hand-written part is `src/ChargerManual.cpp`; regenerate rather than
-hand-edit the generated files.
+`src/Charger.cpp` and `include/charger/Charger.h` are produced by
+`standalone/scripts/gen_charger_sources.py`; the handwritten methods live in
+`src/ChargerManual.cpp`. Regenerate those files instead of editing them.
+
+## Requirements
+
+- Android NDK with the `aarch64-linux-android` toolchain
+- AIDL compiler from the Android build tools
+- A `libbinder_ndk.so` exporting `AServiceManager_addService` and the
+  `ABinderProcess_*` entry points (the NDK stub does not export them)
+- Binder `include_platform` headers providing `android/binder_manager.h`
+- For the Rust build: `cargo`, the `aarch64-linux-android` Rust target and the
+  NDK linker
+
+All dependency locations come from the environment or the build scripts; none
+is tied to a particular checkout path.
 
 ## Build
+
+C++ service:
 
 ```sh
 ./standalone/build.sh
 ```
 
-Output: `standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service`
+Rust service:
 
-`DT_NEEDED` is `liblog.so`, `libbinder_ndk.so`, `libm.so`, `libdl.so`,
-`libc.so` - all loadable by a vendor process. libc++ is linked statically:
-a device has no `libc++_shared.so`, and vendor trees ship `libc++.so`, which
-is built against a different `std::__1` namespace than the NDK's `std::__ndk1`.
+```sh
+./rust/build.sh
+```
+
+Both link `libc++` statically and produce an AArch64 PIE limited to libraries a
+vendor process can load. Each script prints the toolchain and library paths it
+resolved.
+
+## Staging
+
+Build output is placed under `standalone/dist/vendor/bin/hw/`. Copy the
+service to the matching `vendor/bin/hw/` location of a vendor image and
+register it with the AIDL service manager under the `ICharger` instance name.
+The VINTF manifest declares the `vendor.oplus.hardware.charger` interface.
 
 ## Tests
 
 ```sh
 ./standalone/tests/build.sh
+./standalone/verify.sh [path-to-service]
 ```
 
-* `probe` — an AIDL client built from the reconstructed stubs. It calls a
-  running `vendor.oplus.hardware.charger.ICharger` service, so a clean run
-  against the *shipped* HAL proves the reconstructed interface is
-  wire-compatible.
-* `classify_test` — drives the real `FastChargeDetector` against fixture
-  nodes and prints the classification table.
-* `raw_hash` — reads the reserved built-ins (`getInterfaceHash` /
-  `getInterfaceVersion`) off a running service with a raw binder
-  transaction. The shipped service and the rebuilt one answer identically:
-  hash `587d614e5ed419609cd450643820624cf151d465`, version `3`.
-
-On-device run (the service name, the node paths and the fixture directory can
-be overridden through the environment, so the real sysfs nodes are never
-touched):
-
-```sh
-adb push standalone/dist/tests/probe /data/local/tmp/
-adb push standalone/dist/tests/classify_test /data/local/tmp/
-adb push standalone/dist/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service /data/local/tmp/
-adb push standalone/tests/device_boundary_test.sh /data/local/tmp/
-adb shell su -c 'chmod 755 /data/local/tmp/*; /data/local/tmp/device_boundary_test.sh'
-```
-
-### Environment overrides
-
-| Variable | Meaning |
-|---|---|
-| `OPLUS_CHARGER_INSTANCE` | service instance suffix, default `/default` |
-| `OPLUS_CHARGER_PUMP_NODE` | `Pump_Express` node path |
-| `OPLUS_CHARGER_CAPACITY_NODE` | `adapter_capacity` node path |
-| `OPLUS_CHARGER_TECH_NODE` | `charge_technology` node path |
-| `OPLUS_CHARGER_FAST_NODE` | `fast_charge` node path |
-
-Unset means the shipped behaviour.
-
-## Not reconstructed
-
-The shipped binary also owns the wireless subsystem, the BMS heating check,
-the charge reserve, the charge-time update and the battery log. Those need
-the Oplus wireless stack and the `oplus_chg` battery-log nodes, neither of
-which exists on this port; the reconstruction keeps the detection check and
-the fast-charge path and leaves the rest of the interface returning the
-shipped error sentinels.
+The test sources cover an AIDL client, charge classification, node and
+permission probes, and a stress test. Integration tests start the service as a
+separate binder instance and override node paths through environment variables
+so the real sysfs nodes are left untouched.

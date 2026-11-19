@@ -1,4 +1,4 @@
-// nodes.rs - the node I/O helpers.  Every one of these mirrors the shipped
+// nodes.rs - the node I/O helpers. Every one of these mirrors the C++
 // open()/read()/atoi() sequence exactly, including the failure sentinels and
 // the retry-the-secondary-node-on-parse-failure quirk.
 
@@ -9,7 +9,7 @@ use crate::constants::{K_IO_ERROR, K_READ_ERROR, K_WRITE_ERROR};
 
 // atoi() semantics: leading whitespace, optional sign, digits, stop at the
 // first non-digit.  An unparseable buffer yields 0, which is what C's atoi
-// returns; the shipped code compares that against kParseError (INT32_MIN) and
+// returns; the C++ code compares that against kParseError (INT32_MIN) and
 // so never takes the parse-failure branch.
 pub fn c_atoi(buf: &[u8]) -> i32 {
     let mut i = 0;
@@ -32,7 +32,7 @@ pub fn c_atoi(buf: &[u8]) -> i32 {
     v.clamp(i32::MIN as i64, i32::MAX as i64) as i32
 }
 
-/// One open/read/atoi.  Err carries the shipped sentinel.
+/// One open/read/atoi. Err carries the HAL sentinel.
 fn read_int_once(path: &str) -> Result<i32, i32> {
     let mut file = match fs::File::open(path) {
         Ok(f) => f,
@@ -43,7 +43,7 @@ fn read_int_once(path: &str) -> Result<i32, i32> {
         Ok(n) => n,
         Err(_) => return Err(K_IO_ERROR),
     };
-    // read() returns usize in Rust, unlike ssize_t in the C the shipped code
+    // read() returns usize in Rust, unlike ssize_t in the C implementation
     // mirrors, so a negative length is not a separate failure mode here.
     Ok(c_atoi(&buf[..n]))
 }
@@ -68,7 +68,7 @@ pub fn read_node_int(primary: &str, secondary: Option<&str>) -> i32 {
     if value != K_READ_ERROR {
         return value;
     }
-    // atoi() returned INT32_MIN: the shipped code retries the secondary node.
+    // atoi() returned INT32_MIN: the C++ code retries the secondary node.
     let sec = match secondary {
         Some(s) => s,
         None => return K_READ_ERROR,
@@ -166,7 +166,7 @@ pub fn node_exists(path: &str) -> bool {
     fs::metadata(path).is_ok()
 }
 
-/// The shipped getters clamp the sentinels to 0 before answering.
+/// The getters clamp the sentinels to 0 before answering.
 pub fn clamp0(v: i32) -> i32 {
     if is_error(v) {
         0
@@ -179,7 +179,7 @@ pub fn is_error(v: i32) -> bool {
     v == K_READ_ERROR || v == K_IO_ERROR
 }
 
-/// Returns `default` when an OPlus-only node is absent or unreadable on X6739.
+/// Returns `default` when an OPlus-only node is absent or unreadable.
 pub fn sim_read_default(v: i32, default: i32) -> i32 {
     if is_error(v) {
         default
@@ -188,7 +188,7 @@ pub fn sim_read_default(v: i32, default: i32) -> i32 {
     }
 }
 
-/// Simulates a successful write for OPlus-only control nodes absent on X6739.
+/// Simulates a successful write for OPlus-only control nodes that are absent.
 pub fn sim_write_ok(res: i32, value: &str) -> i32 {
     if res == K_READ_ERROR && !value.is_empty() && value.len() <= 16 {
         value.len() as i32

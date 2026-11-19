@@ -1,11 +1,8 @@
 // ChargerConstants.h - sysfs paths, charge-technology ids and the fast-charge
 // thresholds used by the OplusCharger HAL.
 //
-// Every path here was read out of the shipped binary
-// (erofs/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service): the
-// "strings" column of RE/evidence/oplus-charger/.../index.tsv is the exact
-// node list of each getter, in the exact fallback order the shipped code
-// uses (power_supply first, oplus_chg second).
+// Each getter lists its nodes in fallback order: power_supply first, then
+// oplus_chg.
 #pragma once
 
 #include <string>
@@ -18,12 +15,9 @@ namespace charger {
 // ---------------------------------------------------------------------------
 // Charge technology ids
 //
-// Recovered from the {char* name; int id} table at file offset 0x510c0 of the
-// shipped binary (stride 0x28, six entries):
-//   0x510c0 'SVOOC' id=2   0x51110 'PD'   id=3
-//   0x510e8 'VOOC'  id=1   0x51138 'QC'   id=4
-//                            0x51160 'PPS'  id=5
-//                            0x51188 'UFCS' id=6
+// The charge technologies reported by the vendor charger driver:
+//   VOOC = 1, SVOOC = 2, PD = 3, QC = 4, PPS = 5, UFCS = 6,
+// with UNKNOWN = 0.
 // ---------------------------------------------------------------------------
 enum ChargeTechnology {
     CHG_TECH_UNKNOWN = 0,
@@ -41,12 +35,10 @@ const char* chargeTechnologyName(int id);
 // ---------------------------------------------------------------------------
 // Fast-charge thresholds (watts).
 //
-// The shipped Oplus HAL does not compare watts itself: it reports whatever
-// the kernel's oplus_chg driver published in
-// /sys/class/power_supply/battery/{fast_charge,charge_technology}.  This
-// port runs the MTK/Transsion charger driver, which has no oplus_chg driver,
-// so the watt thresholds are applied here instead - the same place the
-// Transsion trancharge HAL applies them (see FastChargeDetector.h).
+// When the kernel oplus_chg driver is present it publishes the charge
+// technology in /sys/class/power_supply/battery/{fast_charge,
+// charge_technology} and its verdict wins. Otherwise the thresholds below
+// are applied here (see FastChargeDetector.h).
 //
 // 33 W  -> "fast charge"   (charge technology VOOC)
 // 45 W  -> "SuperVOOC"     (charge technology SVOOC)
@@ -79,15 +71,12 @@ const char kPowerSupplyBatteryRoot[] = "/sys/class/power_supply/battery/";
 }  // namespace node
 
 // ---------------------------------------------------------------------------
-// Transsion charger driver nodes - the fast-charge source on this port.
-//
-// From the trancharge HAL (vendor.hardware.trancharge-service), handler table
-// entry 0 "PUMPSTAT" (fid 0x0), handler TransferPump_Express:
-//   node  = "/sys/devices/platform/charger/Pump_Express;"
-//           "/sys/devices/platform/charger/adapter_capacity"
-//   the first value is the fast-charge pump state (1 = engaged),
-//   the second is the adapter output in watts.
-// Evidence: RE/evidence/trancharge/handler_table.txt
+// Charger driver nodes used as the fast-charge source when oplus_chg is not
+// available:
+//   "/sys/devices/platform/charger/Pump_Express"
+//       fast-charge pump state (1 = engaged)
+//   "/sys/devices/platform/charger/adapter_capacity"
+//       adapter output in watts
 // ---------------------------------------------------------------------------
 namespace tran {
 const char kPumpExpress[] = "/sys/devices/platform/charger/Pump_Express";
@@ -123,7 +112,7 @@ inline bool isBypassPropEnabled() {
 #endif
 
 // ---------------------------------------------------------------------------
-// Error sentinels - the values the shipped getters return when a node cannot
+// Error sentinels - the values the getters return when a node cannot
 // be read.  Verified in the decompiled bodies of getAcType/getFastCharge:
 //   open() failed            -> INT32_MIN  (0x80000000)
 //   read() failed            -> INT32_MIN + 1 (0x80000002)

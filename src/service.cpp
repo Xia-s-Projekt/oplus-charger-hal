@@ -1,26 +1,13 @@
 // service.cpp - the HAL entry point.
 //
-// Reconstructed from the shipped binary
-// erofs/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service:
-//
-//   main()                    ELF 0x2bd28
-//   registerChargerService()  ELF 0x2ba24
-//
-// The shipped main() does exactly this:
-//   ABinderProcess_setThreadPoolMaxThreadCount(0)
-//   registerChargerService()
-//   ABinderProcess_joinThreadPool()
-//
-// and registerChargerService() builds the service name by appending
+// main() sets up the binder thread pool, registers the service and joins the
+// pool. registerChargerService() builds the instance name by appending
 // "/default" to the interface descriptor
-// "vendor.oplus.hardware.charger.ICharger", then calls
+// "vendor.oplus.hardware.charger.ICharger" and calls
 // AServiceManager_addService() with the BnCharger binder.
 //
-// The shipped service also creates the subsystem objects here (the wireless
-// disconnect check, the BMS heating check, the charge reserve check, the
-// charge time update, the detection check and the battery log update) and
-// starts their threads; the reconstruction keeps the detection check, which
-// is the one the fast-charge path needs.
+// The service creates and starts the charge-detection check here, which is
+// the part the fast-charge path needs.
 #include <android/binder_ibinder.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Regenerate aidl/vendor/oplus/hardware/charger/ICharger.aidl from the shipped stub.
+"""Regenerate aidl/vendor/oplus/hardware/charger/ICharger.aidl.
 
-The transaction code of every method was recovered from the shipped AIDL stub
-erofs/vendor/lib64/vendor.oplus.hardware.charger-V3-ndk.so: each
-BpCharger::<method> performs AIBinder_transact with an immediate in w1, and
-that immediate is the method's transaction code.  The AIDL compiler assigns
-FIRST_CALL_TRANSACTION + N in declaration order, so the declaration order that
-reproduces the shipped codes is exactly the order the codes come out in.
+The AIDL compiler assigns FIRST_CALL_TRANSACTION + N in declaration order, so
+the method order in the interface is also its transaction-code order. Reorder
+the declarations only with the understanding that it changes the wire codes.
 
 Run from the module root:
     python3 standalone/scripts/gen_aidl.py <path-to-txn_codes.txt>
@@ -17,17 +14,12 @@ import sys
 STR = ("std::__1::basic_string<char, std::__1::char_traits<char>, "
        "std::__1::allocator<char>>")
 
-HEADER = """// ICharger.aidl - reconstructed from the shipped AIDL stub
-// erofs/vendor/lib64/vendor.oplus.hardware.charger-V3-ndk.so
+HEADER = """// ICharger.aidl - vendor.oplus.hardware.charger AIDL interface
 //
-// Every method's transaction code was read out of the shipped BpCharger::
-// methods (AIBinder_transact + 'mov w1, #imm'), so the method order below IS
-// the transaction order: code = index + 1.  Reordering these lines changes
-// every transaction code and breaks the framework client.
-//
-// Evidence: RE/evidence/oplus-charger/txn_codes.txt (codes 1..126)
-//           RE/evidence/oplus-charger/v3-ndk-symbols.txt (signatures)
-//           RE/java/smali/.../ICharger.smali (Java view of the same surface)
+// The AIDL compiler assigns transaction codes in declaration order, so the
+// method order below is also the transaction order: code = index + 1.
+// Reordering these lines changes every transaction code and breaks framework
+// clients.
 package vendor.oplus.hardware.charger;
 
 import vendor.oplus.hardware.charger.testKitFeatureTestResult;
@@ -80,8 +72,7 @@ def parse(txn_file):
 
 
 def main():
-    txn = sys.argv[1] if len(sys.argv) > 1 else (
-        "../../../RE/evidence/oplus-charger/txn_codes.txt")
+    txn = sys.argv[1] if len(sys.argv) > 1 else "txn_codes.txt"
     out = sys.argv[2] if len(sys.argv) > 2 else (
         "aidl/vendor/oplus/hardware/charger/ICharger.aidl")
     rows = parse(txn)

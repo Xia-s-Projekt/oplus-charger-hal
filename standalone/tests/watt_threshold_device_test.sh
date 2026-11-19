@@ -1,8 +1,8 @@
 #!/system/bin/sh
 # On-device proof of the 25 W reporting threshold.
 #
-# The rebuilt HAL is started as a separate binder instance with the Transsion
-# charger nodes pointed at fixture files, then getChgConfig(1) - the value the
+# The HAL is started as a separate binder instance with the charger nodes
+# pointed at fixture files, then getChgConfig(1) - the value the
 # framework turns into the "chargewattage" broadcast extra that the charging
 # animation prints - is read back over binder.
 #

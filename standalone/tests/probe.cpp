@@ -1,13 +1,13 @@
-// probe.cpp - device-side wire-compatibility probe.
+// probe.cpp - wire-compatibility probe.
 //
-// It links the RECONSTRUCTED AIDL stubs (the same generated BpCharger the
-// rebuilt HAL uses) and calls the SHIPPED service that is already running on
-// the device as "vendor.oplus.hardware.charger.ICharger/default".
+// It links the generated AIDL stubs (the same BpCharger the HAL uses) and
+// calls the charger service already running as
+// "vendor.oplus.hardware.charger.ICharger/default".
 //
-// If the reconstruction's transaction codes and parcel layouts were wrong,
-// every call would either land on the wrong method or fail to unmarshal.
-// A clean set of replies with plausible values is the proof that the
-// reconstructed .aidl is wire-compatible with the shipped stub.
+// If the interface transaction codes or parcel layouts were wrong, every
+// call would either land on the wrong method or fail to unmarshal. A clean
+// set of replies with plausible values is the proof that the interface is
+// wire-compatible.
 //
 // Usage:  probe <service-instance>
 //         (default: vendor.oplus.hardware.charger.ICharger/default)

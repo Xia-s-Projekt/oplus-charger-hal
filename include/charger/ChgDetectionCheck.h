@@ -1,34 +1,10 @@
 // ChgDetectionCheck.h - uevent driven charge detection.
 //
-// Reconstructed from the shipped binary
-// erofs/vendor/bin/hw/vendor.oplus.hardware.charger-V3-service:
+// RegisterEvent() adds a listener; a netlink socket feeds a single epoll loop
+// that dispatches power_supply uevents to the registered listeners. Each
+// listener updates the HAL state it owns.
 //
-//   ChgDetectionCheck::RegisterEvent(int, std::function, EventWakeup)  ELF 0x2af24
-//   ChgDetectionCheck::UeventEvent(unsigned int)                      ELF 0x2b140
-//   ChgDetectionCheck::UeventInit()                                    ELF 0x2b21c
-//   ChgDetectionCheck::MainLoop()                                      ELF 0x2b394
-//   PowerSupplyUeventMonitorThread(void*)                              ELF 0x2b4c0
-//   oplus_uevent_open_socket(int, bool)                                ELF 0x1a418
-//
-// Structure recovered from the decompiled bodies:
-//   this+0x78  sem_t            semaphore posted on a power_supply uevent
-//   this+0xcc  int              epoll fd
-//   this+0xd0  vector begin     EventHandler*  {owner, fd, std::function}
-//   this+0xd8  vector end
-//   this+0xe0  vector capacity
-//
-// This is the Oplus counterpart of the Transsion trancharge design, but with
-// a different dispatch shape:
-//
-//   trancharge : one uevent thread, a 59-entry {match-string, handler} table,
-//                strstr() over the uevent, handler fills TranChargeInfo,
-//                the registered client callback is notified.
-//   oplus     : one epoll loop, a vector of std::function listeners, the
-//                listener is called with the uevent, the listener updates the
-//                HAL's own state.
-//
-// The fast-charge listener is FastChargeDetector::refresh() - the Oplus
-// equivalent of trancharge's TransferPump_Express handler.
+// The fast-charge listener is FastChargeDetector::refresh().
 #pragma once
 
 #include <semaphore.h>
@@ -76,14 +52,14 @@ public:
     int epollFd() const { return mEpollFd; }
     const std::string& lastUevent() const { return mLastUevent; }
 
-    // Post the power_supply semaphore (used by the shipped UeventEvent).
+    // Post the power_supply semaphore on a power_supply uevent.
     void notifyPowerSupply();
 
     // Wait for the power_supply semaphore.
     void waitPowerSupply();
 
-    // Open a netlink uevent socket.  The shipped binary has its own copy of
-    // this (oplus_uevent_open_socket) instead of libhardware's helper:
+    // Open a netlink uevent socket. This uses an in-tree helper instead of
+    // libhardware's:
     //   socket(AF_NETLINK, SOCK_DGRAM|SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT)
     //   SO_RCVBUF (with SO_RCVBUFFORCE when the kernel doubled it)
     //   SO_PASSCRED when credentials are wanted

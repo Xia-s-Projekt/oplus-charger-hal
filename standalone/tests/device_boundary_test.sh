@@ -1,9 +1,9 @@
 #!/system/bin/sh
-# On-device boundary test for the reconstructed OplusCharger HAL.
-# Run as root.  Push probe + the rebuilt HAL + this script to /data/local/tmp.
+# Boundary test for the OplusCharger HAL.
+# Run as root. Push probe + the HAL + this script to /data/local/tmp.
 #
-# For each watt value it starts the REBUILT HAL with the two Transsion
-# charger nodes pointed at fixture files (through the
+# For each watt value it starts the HAL with the two charger nodes pointed at
+# fixture files (through the
 # OPLUS_CHARGER_PUMP_NODE / OPLUS_CHARGER_CAPACITY_NODE environment
 # variables), then asks the running service what it reports over binder.
 #
@@ -40,8 +40,7 @@ run_case() {
 
     cd "$REMOTE_DIR" || exit 1
     # The oplus driver nodes are pointed at a path that does not exist, so
-    # the detector falls through to the Transsion pair - exactly what it
-    # does on this port, where the oplus_chg driver is absent.
+    # the detector falls through to the charger-driver pair.
     OPLUS_CHARGER_INSTANCE=rebuilt \
     OPLUS_CHARGER_TECH_NODE="$FIXTURE_DIR/absent-tech" \
     OPLUS_CHARGER_FAST_NODE="$FIXTURE_DIR/absent-fast" \

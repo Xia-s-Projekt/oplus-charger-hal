@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Generate a .fsv_meta fs-verity sidecar for a file.
 
-Format (fully reverse-engineered, validated byte-for-byte against 427 of the
-433 real sidecars in erofs/system/system/framework/ -- the 6 mismatches are
-pre-existing stale sidecars, not format errors):
+Format:
 
   offset 0x00  u32   version      = 1
   offset 0x04  u16   hash_algorithm= 1 (SHA-256)

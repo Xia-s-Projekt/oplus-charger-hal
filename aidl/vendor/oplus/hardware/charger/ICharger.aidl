@@ -1,14 +1,9 @@
-// ICharger.aidl - reconstructed from the shipped AIDL stub
-// erofs/vendor/lib64/vendor.oplus.hardware.charger-V3-ndk.so
+// ICharger.aidl - vendor.oplus.hardware.charger AIDL interface
 //
-// Every method's transaction code was read out of the shipped BpCharger::
-// methods (AIBinder_transact + 'mov w1, #imm'), so the method order below IS
-// the transaction order: code = index + 1.  Reordering these lines changes
-// every transaction code and breaks the framework client.
-//
-// Evidence: RE/evidence/oplus-charger/txn_codes.txt (codes 1..126)
-//           RE/evidence/oplus-charger/v3-ndk-symbols.txt (signatures)
-//           RE/java/smali/.../ICharger.smali (Java view of the same surface)
+// The AIDL compiler assigns transaction codes in declaration order, so the
+// method order below is also the transaction order: code = index + 1.
+// Reordering these lines changes every transaction code and breaks framework
+// clients.
 package vendor.oplus.hardware.charger;
 
 import vendor.oplus.hardware.charger.testKitFeatureTestResult;

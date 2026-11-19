@@ -1,1 +1,20 @@
+# Build output
+build/
+dist/
 rust/target/
+*.o
+
+# Probe and test binaries
+probe/
+probe
+*_probe
+
+# Scratch and backups
+*.bak
+*.orig
+*.rej
+*.patch
+
+# Screenshots
+*.png
+screenshots/

@@ -1,8 +1,8 @@
 // ChargerManual.cpp - the part of the Charger class that is not a plain node
 // access: the fast-charge state, the subsystem state and the diagnostic dumps.
 //
-// Everything here is written from the decompiled body of the matching shipped
-// function; the file name and the shipped address are given per function.
+// These methods implement the parts of the interface that are not plain node
+// accesses.
 #include "charger/Charger.h"
 
 #include <android/log.h>
@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/system_properties.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -35,16 +36,11 @@ namespace charger {
 namespace {
 
 // ---------------------------------------------------------------------------
-// TestKit::KernelTest - the shipped test-kit client.
+// TestKit::KernelTest - the test-kit client.
 //
-// Recovered from the shipped TestKit::KernelTest methods:
-//   open()            ELF 0x3f0f8  open("/dev/chg_test_kit", O_RDWR)
-//   close()           ELF 0x3f0bc
-//   getName(uint)     ELF 0x3f2d4  ioctl(fd, 0x4004f601, &index)
-//   getFeatureList()  ELF 0x3f370  ioctl(fd, 0x9000f604, buf)
-//   getFeatureNum()   ELF 0x3f4e4  ioctl(fd, 0x8004f605, &num)
-//   runTest(uint,str) ELF 0x3f7f4  ioctl(fd, 0x9000f606, buf)
-// The ioctl numbers are _IOR('f', n, ...) / _IOWR('f', n, ...) with type 'f'.
+// open() opens /dev/chg_test_kit; getName(), getFeatureList(),
+// getFeatureNum() and runTest() issue ioctls on that fd. The ioctl numbers
+// use type 'f'.
 // ---------------------------------------------------------------------------
 const char kTestKitDevice[] = "/dev/chg_test_kit";
 const unsigned int kIoctlGetName = 0x4004f601;      // _IOR('f', 1, unsigned int)
@@ -124,8 +120,7 @@ private:
     int mFd = -1;
 };
 
-// Shared state of the HAL.  The shipped binary keeps these in globals
-// (DAT_00153bb0 = custom chg mode, DAT_001521b0 = smart chg mode, ...).
+// Shared state of the HAL.
 struct ChargerState {
     int customSelectChgMode = 0;
     int smartChgMode = 0;
@@ -279,7 +274,12 @@ void triggerBatteryUpdate(bool force = false) {
 // Charger life cycle
 // ---------------------------------------------------------------------------
 
+bool bypassChargeSupported();
+
 Charger::Charger() {
+    if (bypassChargeSupported()) {
+        __system_property_set("persist.rianixia.bypass_charge.support", "1");
+    }
     mFastCharge.reset(new FastChargeDetector());
     mDetection.reset(new ChgDetectionCheck());
     mRunning.store(false);
@@ -476,16 +476,14 @@ void Charger::start() {
 // Fast charge - the 33 W / 45 W classification.
 //
 // getFastCharge / getPsyFastChgType / getPsyChargeTech all read the same
-// state in the shipped binary; here they read the FastChargeDetector, which
-// classifies the charging power:
+// FastChargeDetector state, which classifies the charging power:
 //
 //     >= 45 W  -> SuperVOOC   (charge technology SVOOC, id 2)
 //     >= 33 W  -> fast charge (charge technology VOOC,  id 1)
 //     <  33 W  -> normal
 //
 // The detector prefers the Oplus charger driver when it is present and falls
-// back to the Transsion charger driver's Pump_Express / adapter_capacity
-// pair, which is where the watts come from on this port.
+// back to the Pump_Express / adapter_capacity node pair.
 // ---------------------------------------------------------------------------
 
 
@@ -534,7 +532,7 @@ int toExternalChargeTechnology(int internalTech) {
     return ::ndk::ScopedAStatus::ok();
 }
 
-// Shipped ELF 0x1cf54: reads voocchg_ing, and when the wireless driver
+// Reads voocchg_ing, and when the wireless driver
 // holds the status the cached value is returned instead.
 ::ndk::ScopedAStatus Charger::getBattVoocChgIng(int* _out) {
     int value = readIntPath("/sys/devices/platform/charger/fast_chg_indicator");
@@ -575,7 +573,7 @@ int toExternalChargeTechnology(int internalTech) {
     int rc;
     std::string val = value0;
     if (!writeStringPath("/sys/class/power_supply/battery/mmi_charging_enable", val)) {
-        // X6739 has no mmi_charging_enable; battery/disable is the inverse
+        // When mmi_charging_enable is unavailable, battery/disable is the inverse
         rc = writeStringPath("/sys/class/power_supply/battery/disable",
                               (value0 == "0" || value0 == "false") ? "1" : "0")
                      ? 1
@@ -604,11 +602,7 @@ int applyBypassPolicy(bool force) {
     }
     std::string node = std::to_string(value);
     writeStringPath("/sys/devices/platform/charger/bypass_charger", node);
-    writeStringPath("/sys/devices/platform/charger/tran_aichg_disable_charger", node);
-    // The prop is the user's standing intent and only the user's toggle sets
-    // it: a transient decision (charge limit reached, GameSpace asked) must
-    // not persist, or init re-applies it at the next boot and the bypass
-    // engages at any capacity with the in-memory target lost.
+    __system_property_set("persist.sys.rianixia.bypass_charge.state", value == 1 ? "1" : "0");
     return value;
 }
 
@@ -786,7 +780,7 @@ int applyBypassPolicy(bool force) {
 // ---------------------------------------------------------------------------
 // /dev/oplus_chg
 //
-// Shipped ELF 0x1b54c (getChargerControl): open("/dev/oplus_chg"), read 255
+// getChargerControl: open("/dev/oplus_chg"), read 255
 // bytes, close, the buffer becomes the result string.
 // ---------------------------------------------------------------------------
 
@@ -825,7 +819,7 @@ int applyBypassPolicy(bool force) {
 // ---------------------------------------------------------------------------
 // nightstandby
 //
-// Shipped ELF 0x1c3f0: the argument is formatted with snprintf into a 32 byte
+// The argument is formatted with snprintf into a 32 byte
 // buffer and written to soc_ajust, NUL terminator included, with
 // /sys/class/power_supply/battery/soc_ajust tried first.
 // ---------------------------------------------------------------------------
@@ -863,7 +857,7 @@ int applyBypassPolicy(bool force) {
 // framework catches a NumberFormatException and leaves the field at its
 // previous value otherwise.
 //
-// The values come from the MTK charger driver:
+// The values come from the charger driver:
 //   * the CPA wattage is the adapter's output in watts
 //     (/sys/devices/platform/charger/adapter_capacity),
 //   * the super-speed-charge state is a flag, not the charge technology:
@@ -876,7 +870,7 @@ int applyBypassPolicy(bool force) {
 // ---------------------------------------------------------------------------
 
 // The bypass-charge state, /sys/devices/platform/charger/bypass_charger.
-// The MTK charger driver exposes it as a 0/1 flag.
+// The charger driver exposes it as a 0/1 flag.
 //
 // The node is the source of truth: the policy derives it from the live
 // requests, so reporting the prop instead would tell the framework bypass is
@@ -889,7 +883,7 @@ int bypassChargeStatus() {
     return value;
 }
 
-// The MTK charger driver only accepts a bare 0 or 1 on the bypass node, but the
+// The charger driver only accepts a bare 0 or 1 on the bypass node, but the
 // Oplus callers pass a compound payload: "1+switch=1" to enable and
 // "1+switch=0" to disable.  Take the leading integer and drop the rest.
 std::string bypassNodeValue(const std::string& value) {
@@ -903,10 +897,14 @@ std::string bypassNodeValue(const std::string& value) {
     return value.substr(0, end);
 }
 
-// The bypass node exists whenever the MTK charger driver exposes it, which is
+// The bypass node exists whenever the charger driver exposes it, which is
 // what the Oplus support query asks about.
 bool bypassChargeSupported() {
-    return access("/sys/devices/platform/charger/bypass_charger", F_OK) == 0;
+    bool supported = access("/sys/devices/platform/charger/bypass_charger", F_OK) == 0;
+    if (supported) {
+        __system_property_set("persist.rianixia.bypass_charge.support", "1");
+    }
+    return supported;
 }
 
 
@@ -936,14 +934,12 @@ bool bypassChargeSupported() {
         case 0x19:
             // The third argument is the Oplus caller id.  The framework
             // (OplusBatteryService) asks with 1 and wants the live state,
-            // while GameSpace (through COSA) asks with 3 and wants the
-            // support code, where 3 means the device supports bypass
-            // charging.  Returning the raw node value to the second caller
-            // makes it treat the device as unsupported.
-            if (arg2 == 3) {
-                result = bypassChargeSupported() ? 3 : 0;
-            } else {
+            // while GameSpace (through COSA or RemoteClientService) asks with
+            // 2 or 3 and wants the support code (3 = supported).
+            if (arg2 == 1) {
                 result = bypassChargeStatus();
+            } else {
+                result = bypassChargeSupported() ? 3 : 0;
             }
             break;
         default:
@@ -970,7 +966,7 @@ bool bypassChargeSupported() {
             }
             state().bypass.gameSwitch = sw;
             state().bypass.gameTargetPercent = targetPercent;
-            applyBypassPolicy(false);
+            applyBypassPolicy(true);
             break;
         }
         case 0x5:
@@ -1074,9 +1070,8 @@ bool bypassChargeSupported() {
 // ---------------------------------------------------------------------------
 // Diagnostic dumps
 //
-// Shipped ELF 0x123238 (queryChargeInfo, 8452 bytes): reads every charger
-// node in turn and appends "key=value\n" to the result.  The key names and
-// the node list are the shipped ones.
+// queryChargeInfo reads every charger node in turn and appends "key=value\n"
+// to the result.
 // ---------------------------------------------------------------------------
 
 ::ndk::ScopedAStatus Charger::queryChargeInfo(std::string* _out) {
@@ -1135,7 +1130,7 @@ bool bypassChargeSupported() {
     appendString(_out, "battery_type_str",
                  readStringPath("/sys/class/oplus_chg/battery/battery_type"));
 
-    // The fast-charge block is the part this port has to fill in itself.
+    // The fast-charge block comes from the FastChargeDetector.
     appendInt(_out, "fast_charge", mFastCharge ? mFastCharge->getFastCharge() : 0);
     appendInt(_out, "charge_technology",
               mFastCharge ? mFastCharge->getChargeTechnology() : CHG_TECH_UNKNOWN);

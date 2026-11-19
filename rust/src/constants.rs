@@ -77,6 +77,7 @@ pub mod tran {
     pub const TRAN_AICHG_DISABLE_CHARGER: &str =
         "/sys/devices/platform/charger/tran_aichg_disable_charger";
     pub const BYPASS_PROP: &str = "persist.sys.rianixia.bypass_charge.state";
+    pub const BYPASS_SUPPORT_PROP: &str = "persist.rianixia.bypass_charge.support";
 }
 
 pub const TEST_KIT_DEVICE: &str = "/dev/chg_test_kit";

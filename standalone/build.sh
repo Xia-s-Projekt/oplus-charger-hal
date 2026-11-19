@@ -9,7 +9,10 @@
 #
 # Usage:  ./standalone/build.sh
 # Env:    NDK / ANDROID_NDK_ROOT   NDK root or toolchain dir
+#         ANDROID_HOME / ANDROID_SDK_ROOT  SDK root containing ndk/ and build-tools/
 #         AIDL                    path to the aidl binary
+#         BINDER_HEADERS          dir containing android/binder_manager.h
+#         LIBBINDER_NDK           path to a libbinder_ndk.so with service-manager symbols
 #         API                     android API level to compile against (default 34)
 set -euo pipefail
 
@@ -26,8 +29,13 @@ find_ndk() {
     local candidates=()
     [ -n "${NDK:-}" ] && candidates+=("$NDK")
     [ -n "${ANDROID_NDK_ROOT:-}" ] && candidates+=("$ANDROID_NDK_ROOT")
-    candidates+=(/home/ryanistr/Projects/android-ndk-r27c
-                 /opt/android-sdk/ndk/27.3.13750724
+    [ -n "${ANDROID_HOME:-}" ] && candidates+=(
+        "$ANDROID_HOME/ndk/27.3.13750724"
+        "$ANDROID_HOME/ndk/28.2.13676358")
+    [ -n "${ANDROID_SDK_ROOT:-}" ] && candidates+=(
+        "$ANDROID_SDK_ROOT/ndk/27.3.13750724"
+        "$ANDROID_SDK_ROOT/ndk/28.2.13676358")
+    candidates+=(/opt/android-sdk/ndk/27.3.13750724
                  /opt/android-sdk/ndk/28.2.13676358)
     for c in "${candidates[@]}"; do
         [ -d "$c" ] || continue
@@ -46,6 +54,12 @@ find_ndk() {
 find_aidl() {
     local candidates=()
     [ -n "${AIDL:-}" ] && candidates+=("$AIDL")
+    [ -n "${ANDROID_HOME:-}" ] && candidates+=(
+        "$ANDROID_HOME/build-tools/35.0.0/aidl"
+        "$ANDROID_HOME/build-tools/34.0.0/aidl")
+    [ -n "${ANDROID_SDK_ROOT:-}" ] && candidates+=(
+        "$ANDROID_SDK_ROOT/build-tools/35.0.0/aidl"
+        "$ANDROID_SDK_ROOT/build-tools/34.0.0/aidl")
     candidates+=(/opt/android-sdk/build-tools/35.0.0/aidl
                  /opt/android-sdk/build-tools/34.0.0/aidl)
     for c in "${candidates[@]}"; do
@@ -57,10 +71,10 @@ find_aidl() {
 # The NDK sysroot has every android/binder_*.h except binder_manager.h; take
 # it from the AOSP headers snapshot instead of shimming it.
 find_binder_platform_headers() {
-    local candidates=(
-        /mnt/project/Misc/aosp_headers/api36/frameworks/native/libs/binder/ndk/include_platform
-        /mnt/project/Misc/aosp_headers/api35/frameworks/native/libs/binder/ndk/include_platform
-    )
+    local candidates=()
+    [ -n "${BINDER_HEADERS:-}" ] && candidates+=("$BINDER_HEADERS")
+    [ -n "${AOSP_HEADERS:-}" ] && candidates+=(
+        "$AOSP_HEADERS/frameworks/native/libs/binder/ndk/include_platform")
     for c in "${candidates[@]}"; do
         [ -f "$c/android/binder_manager.h" ] && { echo "$c"; return 0; }
     done
@@ -72,11 +86,9 @@ find_binder_platform_headers() {
 # ROM's copy is the right one: /system/lib64/libbinder_ndk.so is listed in
 # llndk.libraries.txt, so a vendor process can load it.
 find_libbinder_ndk() {
-    local candidates=(
-        /mnt/project/RomTools/ROM_WORKDIR/oos/erofs/system/system/lib64/libbinder_ndk.so
-        /mnt/project/RomTools/ROM_WORKDIR/oos/erofs/system/lib64/libbinder_ndk.so
-        /mnt/project/RomTools/ROM_WORKDIR/myvendor/erofs/vendor_my/lib64/libbinder_ndk.so
-    )
+    local candidates=()
+    [ -n "${LIBBINDER_NDK:-}" ] && candidates+=("$LIBBINDER_NDK")
+    [ -n "${BINDER_LIB:-}" ] && candidates+=("$BINDER_LIB")
     for c in "${candidates[@]}"; do
         if [ -f "$c" ]; then
             if llvm-nm -D --defined-only "$c" 2>/dev/null |
@@ -92,9 +104,9 @@ find_libbinder_ndk() {
 TOOLCHAIN="$(find_ndk)" || { echo "ERROR: no NDK found (set NDK=/path/to/ndk)"; exit 1; }
 AIDL_BIN="$(find_aidl)" || { echo "ERROR: no aidl found (set AIDL=/path/to/aidl)"; exit 1; }
 BINDER_HEADERS="$(find_binder_platform_headers)" || {
-    echo "ERROR: no binder include_platform snapshot found"; exit 1; }
+    echo "ERROR: no binder include_platform headers found (set BINDER_HEADERS)"; exit 1; }
 BINDER_LIB="$(find_libbinder_ndk)" || {
-    echo "ERROR: no usable libbinder_ndk.so found (need AServiceManager_addService)"; exit 1; }
+    echo "ERROR: no usable libbinder_ndk.so found (set LIBBINDER_NDK; need AServiceManager_addService)"; exit 1; }
 CXX="$TOOLCHAIN/bin/aarch64-linux-android${API}-clang++"
 LLVM_STRIP="$TOOLCHAIN/bin/llvm-strip"
 [ -x "$CXX" ] || { echo "ERROR: $CXX is missing"; exit 1; }

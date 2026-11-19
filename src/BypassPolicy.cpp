@@ -141,12 +141,18 @@ bool decide(const Inputs& inputs, int* nodeValue) {
     // A GameSpace toggle that carries no target of its own follows the charge
     // limit: engaging it must not stop charging below the limit the user set
     // in the battery settings.
-    int gameTarget = inputs.gameTargetPercent;
-    if (inputs.gameSwitch == 1 && gameTarget <= 0 &&
-        inputs.upLimitEnabled == 1 && inputs.upLimitPercent > 0) {
-        gameTarget = inputs.upLimitPercent;
+    // The GameSpace toggle (setChgConfig 0x19) carries a charge target
+    // percent in its payload when the client sends one ("<pct>+switch=1").
+    // When the toggle is switched on without a target (e.g. "1+switch=1"),
+    // bypass engages immediately regardless of battery capacity.
+    bool gameEngaged = false;
+    if (inputs.gameSwitch == 1) {
+        if (inputs.gameTargetPercent > 1) {
+            gameEngaged = featureEngaged(true, inputs.gameTargetPercent, inputs.capacity);
+        } else {
+            gameEngaged = true;
+        }
     }
-    bool gameEngaged = featureEngaged(inputs.gameSwitch == 1, gameTarget, inputs.capacity);
     bool limitEngaged = featureEngaged(inputs.upLimitEnabled == 1, inputs.upLimitPercent, inputs.capacity);
     int value = (gameEngaged || limitEngaged) ? 1 : 0;
     if (nodeValue != nullptr) {

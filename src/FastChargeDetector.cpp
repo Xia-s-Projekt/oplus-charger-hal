@@ -181,8 +181,8 @@ bool FastChargeDetector::readOplusDriver(FastChargeState* state) const {
     int type = technologyFromName(tech);
     if (type == CHG_TECH_UNKNOWN) {
         // The oplus driver answered, but with a name this table does not
-        // know (or an empty node).  Reporting UNKNOWN here would hide the
-        // Transsion reading, so let the caller fall back to it.
+        // know (or an empty node). Reporting UNKNOWN here would hide the
+        // charger-driver reading, so let the caller fall back to it.
         return false;
     }
 
@@ -195,7 +195,7 @@ bool FastChargeDetector::readOplusDriver(FastChargeState* state) const {
     return true;
 }
 
-// Transsion charger driver: classify the adapter power ourselves.
+// Fallback source: classify the adapter power from the charger-driver nodes.
 bool FastChargeDetector::readTranCharger(FastChargeState* state) const {
     int online = 1;
     if (readIntNode("/sys/class/power_supply/charger/online", &online)) {

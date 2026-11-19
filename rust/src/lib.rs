@@ -1,11 +1,10 @@
 // lib.rs - the Oplus charger HAL, in Rust.
 //
-// This is a behaviour-preserving port of the C++ reconstruction in
-// ../src and ../include.  Nothing here improves on the original: every node
-// path, fallback order, sentinel value and timing constant was copied from
-// it, and the two files that would otherwise drift by transcription
-// (rust/src/charger/accessors.rs and rust/src/txn.rs) are generated from
-// the C++ sources by rust/gen_accessors.py and rust/gen_txn.py.
+// This is a behaviour-preserving implementation of the C++ HAL in ../src and
+// ../include. Node paths, fallback order, sentinel values and timing
+// constants match the C++ version. The two files that would otherwise drift
+// by transcription (rust/src/charger/accessors.rs and rust/src/txn.rs) are
+// produced from the C++ sources by rust/gen_accessors.py and rust/gen_txn.py.
 
 pub mod binder;
 pub mod bypass;

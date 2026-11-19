@@ -1,4 +1,4 @@
-// testKitFeatureTestResult.aidl - reconstructed from the shipped AIDL stub.
+// testKitFeatureTestResult.aidl - AIDL parcelable for charger test-kit results.
 //
 // Field names and types come from the Java view of the same interface:
 // RE/java/smali/vendor/oplus/hardware/charger/testKitFeatureTestResult.smali

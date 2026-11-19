@@ -4,8 +4,8 @@
 // hand; re-run the script instead.  The hand written part of the class
 // lives in src/ChargerManual.cpp.
 //
-// The node path of every accessor is the shipped binary's own string table
-// entry, in the shipped fallback order.
+// The node path of every accessor follows the configured node map in fallback
+// order.
 #pragma once
 
 #include <atomic>
@@ -36,7 +36,7 @@ public:
 
     // ---- AIDL surface -------------------------------------------------
     // Declarations follow the interface declaration order, which is the
-    // transaction order of the shipped stub.
+    // transaction order of the interface definition.
 
     ::ndk::ScopedAStatus VolDividerIcWorkModeSet(const std::string& value0, int* _out) override;
     ::ndk::ScopedAStatus chgExchangeMesgInit(int* _out) override;

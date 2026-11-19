@@ -2,7 +2,7 @@
 //
 // There is exactly one: the bypass-charge state.  The node is the source of
 // truth; the prop exists because init re-applies it to the node on every boot
-// (erofs/vendor/etc/init/tran_optimize.rc).
+// (configured in the init rc script).
 
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -50,6 +50,21 @@ pub fn is_bypass_prop_enabled() -> bool {
 
 pub fn set_bypass_prop(value: i32) {
     let key = match CString::new(tran::BYPASS_PROP) {
+        Ok(k) => k,
+        Err(_) => return,
+    };
+    let val = match CString::new(if value == 1 { "1" } else { "0" }) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    // SAFETY: both CStrings are NUL-terminated and alive for the call.
+    unsafe {
+        __system_property_set(key.as_ptr(), val.as_ptr());
+    }
+}
+
+pub fn set_bypass_support_prop(value: i32) {
+    let key = match CString::new(tran::BYPASS_SUPPORT_PROP) {
         Ok(k) => k,
         Err(_) => return,
     };

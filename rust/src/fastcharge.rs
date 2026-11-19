@@ -1,17 +1,15 @@
 // fastcharge.rs - fast-charge / SuperVOOC classification.
 //
-// A direct port of src/FastChargeDetector.cpp.  The shipped Oplus HAL does
-// not classify charging power itself: it reports what the kernel's oplus_chg
-// driver published.  This port runs the MTK/Transsion charger driver, which
-// has no oplus_chg driver, so the watt thresholds are applied here instead -
-// the same place the Transsion trancharge HAL applies them.
+// A direct implementation of src/FastChargeDetector.cpp. When the kernel
+// oplus_chg driver publishes charge technology and power in sysfs, those
+// values are used. Otherwise the watt thresholds below are applied here.
 //
 //   >= 45 W -> SuperVOOC (charge technology SVOOC, id 2)
 //   >= 33 W -> fast charge (charge technology VOOC, id 1)
 //   <  33 W -> normal
 //
-// The watts decide the charge technology.  The Transsion pump state is a
-// separate signal, reported on its own; it does not gate the classification.
+// The watts decide the charge technology. The pump state is a separate signal,
+// reported on its own; it does not gate the classification.
 
 use crate::constants::{self, ChargeTechnology, K_READ_ERROR};
 
@@ -47,7 +45,7 @@ pub struct FastChargeDetector {
     power_supply_fast_charge: String,
     pump_express: String,
     adapter_capacity: String,
-    // mFastChgIndicator in the shipped C++: assigned in the ctor, never read.
+    // mFastChgIndicator in the C++ version: assigned in the ctor, never read.
     #[allow(dead_code)]
     fast_chg_indicator: String,
     state: FastChargeState,
@@ -146,7 +144,7 @@ impl FastChargeDetector {
         if ty == ChargeTechnology::Unknown {
             // The oplus driver answered with a name this table does not know
             // (or an empty node).  Reporting UNKNOWN here would hide the
-            // Transsion reading, so let the caller fall back to it.
+            // charger-driver reading, so let the caller fall back to it.
             return None;
         }
 
@@ -160,7 +158,7 @@ impl FastChargeDetector {
         })
     }
 
-    /// Transsion charger driver: classify the adapter power ourselves.
+    /// Fallback source: classify the adapter power from the charger-driver nodes.
     fn read_tran_charger(&self) -> FastChargeState {
         let mut state = FastChargeState::default();
         let online = read_int_node("/sys/class/power_supply/charger/online");

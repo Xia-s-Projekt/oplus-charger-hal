@@ -137,19 +137,15 @@ fn feature_engaged(requested: bool, target_percent: i32, capacity: i32) -> bool 
 /// Returns the value to write to the node, and whether anything at all is
 /// requesting bypass.  When nothing is, the caller keeps the node as it is.
 pub fn decide(inputs: &BypassInputs, node_value: &mut i32) -> bool {
-    let mut game_target = inputs.game_target_percent;
-    if inputs.game_switch == 1
-        && game_target <= 0
-        && inputs.up_limit_enabled == 1
-        && inputs.up_limit_percent > 0
-    {
-        game_target = inputs.up_limit_percent;
-    }
-    let game_engaged = feature_engaged(
-        inputs.game_switch == 1,
-        game_target,
-        inputs.capacity,
-    );
+    let game_engaged = if inputs.game_switch == 1 {
+        if inputs.game_target_percent > 1 {
+            feature_engaged(true, inputs.game_target_percent, inputs.capacity)
+        } else {
+            feature_engaged(true, 0, inputs.capacity)
+        }
+    } else {
+        false
+    };
     let limit_engaged = feature_engaged(
         inputs.up_limit_enabled == 1,
         inputs.up_limit_percent,

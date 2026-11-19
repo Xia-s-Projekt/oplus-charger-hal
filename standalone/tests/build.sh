@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build the device-side test binaries.
 #
-#   probe   - an AIDL client built from the RECONSTRUCTED stubs.  It calls the
-#             SHIPPED service that is already running on the device, so a clean
-#             run proves the reconstructed .aidl is wire-compatible.
+#   probe   - an AIDL client built from the AIDL stubs. It calls the charger
+#             service that is already running, so a clean run proves the
+#             interface definition is wire-compatible.
 #
 # The generated AIDL stubs are reused from the main build so the probe links
 # exactly the same glue the HAL does.

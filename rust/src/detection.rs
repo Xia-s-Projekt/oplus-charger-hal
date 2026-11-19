@@ -1,11 +1,9 @@
 // detection.rs - the power-supply uevent listener.
 //
-// A port of src/ChgDetectionCheck.cpp.  The C++ class opens a netlink socket
-// with the exact buffer sizing the shipped oplus_uevent_open_socket uses,
+// A port of src/ChgDetectionCheck.cpp. The C++ class opens a netlink socket,
 // registers it with epoll and waits on a semaphore that the uevent handler
-// posts.  Only the fast-charge path needs it, so the reconstruction keeps
-// the socket and the wait; nothing in this port consumes the events beyond
-// waking the monitor loop.
+// posts. Only the fast-charge path needs it; nothing else consumes the events
+// beyond waking the monitor loop.
 
 pub struct ChgDetectionCheck {
     uevent_fd: i32,
@@ -20,7 +18,7 @@ impl ChgDetectionCheck {
         }
     }
 
-    /// Open the netlink uevent socket with the shipped buffer sizing.
+    /// Open the netlink uevent socket with the configured buffer sizing.
     /// Returns the fd, or -1.
     pub fn open_uevent_socket(&mut self, buffer_size: i32, pass_credentials: bool) -> i32 {
         // SAFETY: every pointer argument is a stack local of this frame whose
@@ -51,7 +49,7 @@ impl ChgDetectionCheck {
 
             // The kernel doubles the requested buffer; if it is still too
             // small ask for the exact size with SO_RCVBUFFORCE, exactly as
-            // the shipped oplus_uevent_open_socket does.
+            // the C++ socket setup does.
             let mut actual: i32 = 0;
             let mut len = std::mem::size_of::<i32>() as libc::socklen_t;
             if libc::getsockopt(

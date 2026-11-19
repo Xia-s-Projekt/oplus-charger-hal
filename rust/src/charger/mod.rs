@@ -60,7 +60,7 @@ static OTG_SWITCH_STATE: AtomicI32 = AtomicI32::new(0);
 pub struct Charger {
     pub(crate) state: Mutex<ChargerState>,
     fast_charge: Mutex<FastChargeDetector>,
-    // Mirrors mDetection in Charger.h, which the shipped code constructs and
+    // Mirrors mDetection in Charger.h, which the C++ implementation constructs and
     // resets but never queries; the Rust monitor drives the netlink socket
     // directly in monitor.rs, so this stays unused.
     #[allow(dead_code)]
@@ -77,6 +77,9 @@ impl Default for Charger {
 
 impl Charger {
     pub fn new() -> Self {
+        if Self::bypass_charge_supported() {
+            props::set_bypass_support_prop(1);
+        }
         Self {
             state: Mutex::new(ChargerState::default()),
             fast_charge: Mutex::new(FastChargeDetector::new()),
@@ -211,11 +214,7 @@ impl Charger {
         }
         let node = value.to_string();
         Self::write_string_path(constants::tran::BYPASS_CHARGER, &node);
-        Self::write_string_path(constants::tran::TRAN_AICHG_DISABLE_CHARGER, &node);
-        // The prop is the user's standing intent and only the user's toggle
-        // sets it: a transient decision (charge limit reached, GameSpace
-        // asked) must not persist, or init re-applies it at the next boot and
-        // the bypass engages at any capacity with the in-memory target lost.
+        props::set_bypass_prop(value);
         value
     }
 
@@ -230,10 +229,14 @@ impl Charger {
     }
 
     fn bypass_charge_supported() -> bool {
-        nodes::node_exists(constants::tran::BYPASS_CHARGER)
+        let supported = nodes::node_exists(constants::tran::BYPASS_CHARGER);
+        if supported {
+            props::set_bypass_support_prop(1);
+        }
+        supported
     }
 
-    /// The MTK charger driver only accepts a bare 0 or 1 on the bypass node,
+    /// The charger driver only accepts a bare 0 or 1 on the bypass node,
     /// but the Oplus callers pass "1+switch=1".  Take the leading integer.
     // Mirrors the static bypassNodeValue in ChargerManual.cpp, which also has
     // no callers upstream; kept so the transcription diff stays 1:1.
@@ -280,7 +283,7 @@ impl Charger {
         self.external_charge_technology()
     }
 
-    // Shipped ELF 0x1cf54: reads voocchg_ing, and when the wireless driver
+    // Reads voocchg_ing, and when the wireless driver
     // holds the status the cached value is returned instead.
     pub(crate) fn txn_getBattVoocChgIng(&self) -> i32 {
         let mut value = Self::read_int_path("/sys/devices/platform/charger/fast_chg_indicator");
@@ -435,7 +438,7 @@ impl Charger {
 
     // --- /dev/oplus_chg ---------------------------------------------------
 
-    // Shipped ELF 0x1b54c: open("/dev/oplus_chg"), read 255 bytes, close.
+    // open("/dev/oplus_chg"), read 255 bytes, close.
     pub(crate) fn txn_getChargerControl(&self) -> String {
         use std::io::Read;
         let mut file = match std::fs::File::open("/dev/oplus_chg") {
@@ -469,7 +472,7 @@ impl Charger {
         }
     }
 
-    // Shipped ELF 0x1c3f0: snprintf into 32 bytes, write to soc_ajust with
+    // snprintf into 32 bytes, write to soc_ajust with
     // the NUL terminator included.
     pub(crate) fn txn_nightstandby(&self, a0: i32) -> i32 {
         let buf = format!("{a0}");
@@ -508,17 +511,16 @@ impl Charger {
             0x18 | 0x19 => {
                 // The third argument is the Oplus caller id.  The framework
                 // (OplusBatteryService) asks with 1 and wants the live
-                // state, while GameSpace (through COSA) asks with 3 and
-                // wants the support code, where 3 means the device supports
-                // bypass charging.
-                if a2 == 3 {
+                // state, while GameSpace (through COSA or RemoteClientService)
+                // asks with 2 or 3 and wants the support code (3 = supported).
+                if a2 == 1 {
+                    Self::bypass_charge_status()
+                } else {
                     if Self::bypass_charge_supported() {
                         3
                     } else {
                         0
                     }
-                } else {
-                    Self::bypass_charge_status()
                 }
             }
             _ => 0,
@@ -540,7 +542,7 @@ impl Charger {
                         st.bypass.game_switch = sw;
                         st.bypass.game_target_percent = target;
                     }
-                    self.apply_bypass_policy(false);
+                    self.apply_bypass_policy(true);
                 }
             }
             0x5 | 0xe => {
@@ -745,7 +747,7 @@ impl Charger {
             &Self::read_string_path("/sys/class/oplus_chg/battery/battery_type"),
         );
 
-        // The fast-charge block is the part this port has to fill in itself.
+        // The fast-charge block comes from the FastChargeDetector.
         Self::append_int(&mut out, "fast_charge", self.fast_charge_fast());
         Self::append_int(
             &mut out,
@@ -828,7 +830,7 @@ impl Charger {
 
     // --- hand-written accessors ------------------------------------------
 
-    // The MTK ADC node is in mV, the Oplus node is in uV, so the fallback is
+    // The ADC node is in mV, the Oplus node is in uV, so the fallback is
     // scaled before it is reported.
     pub(crate) fn txn_getChargerIdVolt(&self) -> i32 {
         let mut val = nodes::read_node_int(
@@ -912,10 +914,8 @@ impl Charger {
         // "humidity".  com.oplus.powermonitor's UsbStatusWarningService pops
         // the "Alien object or liquid detected" warning whenever either bit is
         // set, so returning charger/online (1) here false-alarms once per
-        // minute.  The X6739 stack has no such sensor:
-        // /sys/class/power_supply/usb does not exist and Transsion's
-        // tran_water_detect only exports a test-injection node, so the only
-        // safe fallback is 0.
+        // minute. When the USB node is unavailable there is no sensor-backed
+        // value to report, so the only safe fallback is 0.
         let val = nodes::read_node_int_single("/sys/class/power_supply/usb/usb_status");
         if nodes::is_error(val) {
             0

@@ -1,15 +1,9 @@
-# The NDK clang driver is the linker so that crtbegin/crtend and libc come
-# from the sysroot instead of from the host.
+# The NDK clang driver is the linker so crtbegin/crtend and libc come from the
+# NDK sysroot instead of the host. Its bin directory must be on PATH; the
+# checkout-specific linker search path and extra flags are supplied by
+# rust/build.sh through RUSTFLAGS so nothing here depends on a local path.
 [target.aarch64-linux-android]
-linker = "/home/ryanistr/Projects/android-ndk-r27c/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang"
-rustflags = [
-    "-C", "link-arg=-static-libstdc++",
-    "-C", "link-arg=-Wl,--gc-sections",
-    # The NDK libbinder_ndk does not export the ABinderProcess_* entry
-    # points, so link the ROM's copy - same library the C++ build uses.
-    "-C", "link-arg=-L/mnt/project/RomTools/ROM_WORKDIR/oos/erofs/system/system/lib64",
-    "-C", "link-arg=-lbinder_ndk",
-]
+linker = "aarch64-linux-android34-clang"
 
 [build]
 # Nothing else here on purpose: the target is selected with --target.
