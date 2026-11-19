@@ -8,6 +8,11 @@ full AOSP source tree.
 
 ## What it does
 
+Functionally, the HAL is the bridge between the platform's charging nodes and
+Android's battery framework. It reports battery and adapter state, available
+charge technology and charging limits to the framework, and applies
+charging-control requests such as bypass charging.
+
 The service implements `ICharger` by reading charge state from sysfs nodes and
 translating it into the values the framework expects. It:
 
